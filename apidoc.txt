@@ -1,0 +1,770 @@
+FLIGHT BOOKING BACKEND API DOCUMENTATION
+========================================
+
+Project: Flight Booking Backend
+API Version: 1.0.0
+Default Base URL: http://localhost:3000
+Swagger UI: http://localhost:3000/api-docs
+
+Last updated: 2026-06-22
+
+
+INSTALLATION
+------------
+
+1. Install Node.js
+   Recommended: Node.js 18 or newer
+
+2. Install PostgreSQL
+   This backend uses PostgreSQL through the pg package.
+
+3. Install project dependencies
+
+   npm install
+
+4. Create a .env file in the project root
+
+   PORT=3000
+   DB_HOST=localhost
+   DB_PORT=5432
+   DB_NAME=flight_booking
+   DB_USER=postgres
+   DB_PASSWORD=your_database_password
+   JWT_SECRET=your_jwt_secret
+   JWT_EXPIRES_IN=1d
+   DUFFEL_API_KEY=your_duffel_api_key
+
+5. Create the PostgreSQL database
+
+   Create a database matching DB_NAME.
+
+6. Run the database schema
+
+   database/schema.sql
+
+   Example:
+   psql -U postgres -d flight_booking -f database/schema.sql
+
+
+HOW TO START
+------------
+
+Development mode:
+
+   npm run dev
+
+Production/simple start:
+
+   npm start
+
+After starting, open:
+
+   http://localhost:3000
+
+Swagger UI:
+
+   http://localhost:3000/api-docs
+
+
+API ENDPOINT TABLES
+-------------------
+
+Health
+| Endpoint | Method | Description                 | Auth Required |
+| -------- | ------ | -----------                 | ------------- |
+| `/`      | GET    | Check if backend is running | No |
+| `/test`  | GET    | Test server response        | No |
+
+Authentication
+| Endpoint             | Method | Description                     | Auth Required |
+| --------             | ------ | -----------                     | ------------- |
+| `/api/auth/register` | POST   | Register a new user account     | No |
+| `/api/auth/login`    | POST   | Login user and return JWT token | No |
+| `/api/auth/profile`  | GET    | Get logged in user's profile    | Yes |
+
+Flight Search
+| Endpoint              | Method | Description                                   | Auth Required |
+| --------              | ------ | -----------                                   | ------------- |
+| `/api/flights/search` | POST   | Create a flight search for the logged in user | Yes |
+
+Flight Results
+| Endpoint               | Method | Description                             | Auth Required |
+| --------               | ------ | -----------                             | ------------- |
+| `/api/results/results` | POST   | Placeholder endpoint for flight results | No |
+
+Duffel Flight Search
+| Endpoint             | Method | Description                          | Auth Required |
+| --------             | ------ | -----------                          | ------------- |
+| `/api/duffel/search` | POST   | Search flight offers from Duffel API | No |
+
+Selected Flights
+| Endpoint                | Method | Description              | Auth Required |
+| --------                | ------ | -----------              | ------------- |
+| `/api/selected-flights` | POST   | Save the selected flight | No |
+
+
+QUICK FRONTEND NOTES
+--------------------
+
+1. JWT token
+   - Login returns the token.
+   - Protected endpoints require:
+
+     Authorization: Bearer <token>
+
+2. Protected endpoints
+   - GET /api/auth/profile
+   - POST /api/flights/search
+
+3. Duffel search
+   - Requires DUFFEL_API_KEY in the backend .env file.
+
+4. Placeholder endpoint
+   - POST /api/results/results currently only returns a test message.
+
+5. Not yet implemented as API routes
+   - Passenger APIs
+   - Booking APIs
+   - Payment APIs
+   - Ticketing APIs
+
+
+GENERAL NOTES
+-------------
+
+1. All request and response bodies use JSON.
+2. Send this header for JSON requests:
+
+   Content-Type: application/json
+
+3. Protected endpoints require a JWT access token from the login API.
+4. Send the JWT token using this header:
+
+   Authorization: Bearer <token>
+
+5. Common auth errors:
+
+   401 Access Denied
+   {
+       "message": "Access Denied"
+   }
+
+   401 Invalid Token
+   {
+       "message": "Invalid Token"
+   }
+
+6. Common server error:
+
+   500 Internal Server Error
+   {
+       "error": "Error message"
+   }
+
+
+AVAILABLE ROUTE GROUPS
+----------------------
+
+Health:
+- GET /
+- GET /test
+
+Authentication:
+- POST /api/auth/register
+- POST /api/auth/login
+- GET /api/auth/profile
+
+Flight Search:
+- POST /api/flights/search
+
+Flight Results:
+- POST /api/results/results
+
+Duffel Flight Search:
+- POST /api/duffel/search
+
+Selected Flights:
+- POST /api/selected-flights
+
+
+============================================================
+HEALTH ENDPOINTS
+============================================================
+
+1. Check Backend Status
+-----------------------
+
+Method:
+GET
+
+Endpoint:
+/
+
+Auth Required:
+No
+
+Description:
+Checks if the backend server is running.
+
+Success Response:
+Status: 200
+
+{
+    "message": "Flight Booking Backend Running"
+}
+
+
+2. Test Server
+--------------
+
+Method:
+GET
+
+Endpoint:
+/test
+
+Auth Required:
+No
+
+Description:
+Simple test endpoint to confirm the server is working.
+
+Success Response:
+Status: 200
+
+{
+    "message": "Server Working"
+}
+
+
+============================================================
+AUTHENTICATION APIS
+============================================================
+
+1. Register User
+----------------
+
+Method:
+POST
+
+Endpoint:
+/api/auth/register
+
+Auth Required:
+No
+
+Description:
+Creates a new user account.
+
+Request Body:
+
+{
+    "title": "Mr",
+    "first_name": "John",
+    "last_name": "Doe",
+    "phone_number": "0812345678",
+    "email_address": "john@example.com",
+    "password": "password123",
+    "confirm_password": "password123"
+}
+
+Required Fields:
+- title
+- first_name
+- last_name
+- phone_number
+- email_address
+- password
+- confirm_password
+
+Validation:
+- All fields above are required.
+- password and confirm_password must match.
+- email_address must be unique.
+
+Success Response:
+Status: 201
+
+{
+    "message": "User registered successfully",
+    "user": {
+        "email_address": "john@example.com",
+        "first_name": "John",
+        "last_name": "Doe"
+    }
+}
+
+Error Responses:
+
+Status: 400
+{
+    "message": "All fields are required"
+}
+
+Status: 400
+{
+    "message": "Passwords do not match"
+}
+
+Status: 400
+{
+    "message": "Email already exists"
+}
+
+
+2. Login User
+-------------
+
+Method:
+POST
+
+Endpoint:
+/api/auth/login
+
+Auth Required:
+No
+
+Description:
+Logs in a user and returns a JWT token.
+
+Request Body:
+
+{
+    "email_address": "john@example.com",
+    "password": "password123"
+}
+
+Required Fields:
+- email_address
+- password
+
+Success Response:
+Status: 200
+
+{
+    "message": "Login Successful",
+    "token": "<jwt_token>",
+    "user": {
+        "email_address": "john@example.com",
+        "first_name": "John",
+        "last_name": "Doe"
+    }
+}
+
+Frontend Usage:
+Store the token and send it in protected requests:
+
+Authorization: Bearer <jwt_token>
+
+Error Responses:
+
+Status: 400
+{
+    "message": "Email and Password are required"
+}
+
+Status: 401
+{
+    "message": "Invalid Email or Password"
+}
+
+
+3. Get Logged In User Profile
+-----------------------------
+
+Method:
+GET
+
+Endpoint:
+/api/auth/profile
+
+Auth Required:
+Yes
+
+Headers:
+
+Authorization: Bearer <jwt_token>
+
+Description:
+Returns the profile of the logged in user.
+
+Success Response:
+Status: 200
+
+{
+    "email_address": "john@example.com",
+    "first_name": "John",
+    "last_name": "Doe"
+}
+
+Error Responses:
+
+Status: 401
+{
+    "message": "Access Denied"
+}
+
+Status: 401
+{
+    "message": "Invalid Token"
+}
+
+
+============================================================
+FLIGHT SEARCH APIS
+============================================================
+
+1. Create Flight Search
+-----------------------
+
+Method:
+POST
+
+Endpoint:
+/api/flights/search
+
+Auth Required:
+Yes
+
+Headers:
+
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+Description:
+Creates a flight search record for the logged in user and stores one or more search segments.
+
+Request Body:
+
+{
+    "trip_type": "ONE_WAY",
+    "adult_passenger_count": 1,
+    "child_passenger_count": 0,
+    "infant_passenger_count": 0,
+    "cabin_class": "economy",
+    "preferred_airline": "Thai Airways",
+    "direct_flight_only": false,
+    "promo_fare_type": null,
+    "currency_code": "USD",
+    "segments": [
+        {
+            "origin_airport_code": "BKK",
+            "destination_airport_code": "SIN",
+            "departure_date": "2026-07-10"
+        }
+    ]
+}
+
+Required Fields:
+- segments must exist and contain at least one segment.
+- Each segment should include:
+  - origin_airport_code
+  - destination_airport_code
+  - departure_date
+
+Database Required Fields:
+- trip_type
+- adult_passenger_count
+- child_passenger_count
+- infant_passenger_count
+- cabin_class
+- currency_code
+
+Allowed trip_type Values:
+- ONE_WAY
+- ROUND_TRIP
+- MULTI_CITY
+
+Notes:
+- This endpoint uses the logged in user's email from the JWT token.
+- The service inserts data into flight_searches and flight_search_segments.
+
+Success Response:
+Status: 201
+
+{
+    "message": "Flight search created successfully",
+    "flight_search_id": "uuid-value"
+}
+
+Error Responses:
+
+Status: 400
+{
+    "message": "At least one segment is required"
+}
+
+Status: 401
+{
+    "message": "Access Denied"
+}
+
+Status: 401
+{
+    "message": "Invalid Token"
+}
+
+
+============================================================
+FLIGHT RESULTS APIS
+============================================================
+
+1. Flight Results Placeholder
+-----------------------------
+
+Method:
+POST
+
+Endpoint:
+/api/results/results
+
+Auth Required:
+No
+
+Description:
+Current placeholder endpoint for flight results. It does not currently read request body data or search real results.
+
+Request Body:
+No request body is required by the current implementation.
+
+Success Response:
+Status: 200
+
+{
+    "message": "Results endpoint working"
+}
+
+Implementation Note:
+This route is currently a placeholder in src/routes/flightResultRoutes.js.
+
+
+============================================================
+DUFFEL FLIGHT SEARCH APIS
+============================================================
+
+1. Search Flights Through Duffel
+--------------------------------
+
+Method:
+POST
+
+Endpoint:
+/api/duffel/search
+
+Auth Required:
+No
+
+Headers:
+
+Content-Type: application/json
+
+Description:
+Searches flight offers from the Duffel API and returns mapped flight results.
+
+Request Body:
+
+{
+    "origin": "BKK",
+    "destination": "SIN",
+    "departure_date": "2026-07-10"
+}
+
+Required Fields:
+- origin
+- destination
+- departure_date
+
+Notes:
+- origin and destination should be IATA airport codes.
+- departure_date should use YYYY-MM-DD format.
+- The backend sends one adult passenger and economy cabin class to Duffel.
+- This endpoint requires DUFFEL_API_KEY to be configured in the backend environment.
+
+Success Response:
+Status: 200
+
+{
+    "total_results": 1,
+    "results": [
+        {
+            "flight_offer_id": "off_0000000000000000",
+            "airline_name": "Singapore Airlines",
+            "airline_code": "SQ",
+            "total_price": "120.00",
+            "currency_code": "USD",
+            "departure_airport": "BKK",
+            "arrival_airport": "SIN",
+            "departure_datetime": "2026-07-10T09:00:00",
+            "arrival_datetime": "2026-07-10T12:30:00",
+            "total_stop_count": 0,
+            "cabin_class": "economy"
+        }
+    ]
+}
+
+Error Response:
+
+Status: 500
+{
+    "error": "Error message"
+}
+
+
+============================================================
+SELECTED FLIGHTS APIS
+============================================================
+
+1. Select Flight
+----------------
+
+Method:
+POST
+
+Endpoint:
+/api/selected-flights
+
+Auth Required:
+No
+
+Headers:
+
+Content-Type: application/json
+
+Description:
+Stores the flight selected by the user.
+
+Request Body:
+
+{
+    "flight_search_id": "uuid-value",
+    "flight_result_id": "result-001",
+    "flight_offer_id": "off_0000000000000000",
+    "selected_trip_type": "OUTBOUND",
+    "airline_name": "Singapore Airlines",
+    "flight_number": "SQ705",
+    "origin_airport_code": "BKK",
+    "destination_airport_code": "SIN",
+    "departure_datetime": "2026-07-10T09:00:00",
+    "arrival_datetime": "2026-07-10T12:30:00",
+    "cabin_class": "economy",
+    "baggage_allowance": "20kg",
+    "refundable_status": false,
+    "selected_fare_price": 120.00,
+    "currency_code": "USD"
+}
+
+Required Fields:
+- flight_search_id
+- flight_result_id
+- selected_trip_type
+- airline_name
+- flight_number
+- origin_airport_code
+- destination_airport_code
+- departure_datetime
+- arrival_datetime
+- cabin_class
+- selected_fare_price
+- currency_code
+
+Optional Fields:
+- flight_offer_id
+- baggage_allowance
+- refundable_status
+
+Allowed selected_trip_type Values:
+- OUTBOUND
+- RETURN
+- MULTI_CITY
+
+Notes:
+- flight_search_id must already exist in the flight_searches table.
+- flight_result_id is required by the database.
+- flight_offer_id is accepted by the controller, but the current database schema does not include a flight_offer_id column in selected_flights. If this column has not been added manually, this endpoint may fail.
+
+Success Response:
+Status: 201
+
+{
+    "message": "Flight selected successfully",
+    "selectedFlight": {
+        "selected_flight_id": "uuid-value",
+        "flight_search_id": "uuid-value",
+        "flight_result_id": "result-001",
+        "selected_trip_type": "OUTBOUND",
+        "airline_name": "Singapore Airlines",
+        "flight_number": "SQ705",
+        "origin_airport_code": "BKK",
+        "destination_airport_code": "SIN",
+        "departure_datetime": "2026-07-10T09:00:00.000Z",
+        "arrival_datetime": "2026-07-10T12:30:00.000Z",
+        "cabin_class": "economy",
+        "baggage_allowance": "20kg",
+        "refundable_status": false,
+        "selected_fare_price": "120.00",
+        "currency_code": "USD",
+        "selection_status": "SELECTED",
+        "selected_at": "2026-06-21T00:00:00.000Z"
+    }
+}
+
+Error Response:
+
+Status: 500
+{
+    "error": "Error message"
+}
+
+
+============================================================
+FRONTEND INTEGRATION FLOW
+============================================================
+
+Typical user flow:
+
+1. Register user:
+   POST /api/auth/register
+
+2. Login user:
+   POST /api/auth/login
+
+3. Store token from login response.
+
+4. Create a flight search:
+   POST /api/flights/search
+   Header: Authorization: Bearer <token>
+
+5. Search Duffel offers:
+   POST /api/duffel/search
+
+6. Select one returned flight:
+   POST /api/selected-flights
+
+7. Get logged in profile when needed:
+   GET /api/auth/profile
+   Header: Authorization: Bearer <token>
+
+
+============================================================
+ENDPOINTS NOT YET IMPLEMENTED
+============================================================
+
+The database schema contains tables for passengers, bookings, booking_passengers, and payments.
+However, the current Express app does not expose API routes for those resources yet.
+
+Not currently available:
+- Passenger create/update APIs
+- Booking create/list/detail APIs
+- Payment APIs
+- Ticketing APIs
+
+
+============================================================
+ENVIRONMENT VARIABLES USED BY BACKEND
+============================================================
+
+PORT
+JWT_SECRET
+JWT_EXPIRES_IN
+DUFFEL_API_KEY
+Database connection variables used by config/db.js
