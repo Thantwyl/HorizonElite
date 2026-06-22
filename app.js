@@ -1,16 +1,11 @@
 const express = require("express");
+const cors = require("cors");
 const pool = require("./config/db");
 
 require("dotenv").config();
 
 console.log("APP.JS LOADED");
 console.log("Flight Result Routes Registered");
-
-const swaggerUi =
-require("swagger-ui-express");
-
-const swaggerSpec =
-require("./src/docs/swagger");
 
 const authRoutes =
 require("./src/routes/authRoutes");
@@ -25,11 +20,19 @@ const duffelRoutes =
 require("./src/routes/duffelRoutes");
 
 const selectedFlightRoutes =
-require(
-    "./src/routes/selectedFlightRoutes"
-);
+require("./src/routes/selectedFlightRoutes");
+
+const passengerRoutes =
+require("./src/routes/passengerRoutes");
 
 const app = express();
+
+app.use(cors({
+    origin: process.env.FRONTEND_URL || "*",
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+}));
 
 app.use(express.json());
 
@@ -65,11 +68,8 @@ app.use(
 );
 
 app.use(
-    "/api-docs",
-    swaggerUi.serve,
-    swaggerUi.setup(
-        swaggerSpec
-    )
+    "/api/passengers",
+    passengerRoutes
 );
 
 /*
