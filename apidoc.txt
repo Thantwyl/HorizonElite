@@ -22,28 +22,9 @@ INSTALLATION
 
    npm install
 
-4. Create a .env file in the project root
-
-   PORT=3000
-   DB_HOST=localhost
-   DB_PORT=5432
-   DB_NAME=flight_booking
-   DB_USER=postgres
-   DB_PASSWORD=your_database_password
-   JWT_SECRET=your_jwt_secret
-   JWT_EXPIRES_IN=1d
-   DUFFEL_API_KEY=your_duffel_api_key
-
-5. Create the PostgreSQL database
-
-   Create a database matching DB_NAME.
-
-6. Run the database schema
+4. Run the database schema in your PostgreSQL database
 
    database/schema.sql
-
-   Example:
-   psql -U postgres -d flight_booking -f database/schema.sql
 
 
 HOW TO START
@@ -83,19 +64,14 @@ Authentication
 | `/api/auth/profile`  | GET    | Get logged in user's profile    | Yes |
 
 Flight Search
-| Endpoint              | Method | Description                                   | Auth Required |
-| --------              | ------ | -----------                                   | ------------- |
-| `/api/flights/search` | POST   | Create a flight search for the logged in user | Yes |
+| Endpoint              | Method | Description                                              | Auth Required |
+| --------              | ------ | -----------                                              | ------------- |
+| `/api/flights/search` | POST   | Search flights and save search record for logged in user | Yes |
 
 Flight Results
-| Endpoint               | Method | Description                             | Auth Required |
-| --------               | ------ | -----------                             | ------------- |
-| `/api/results/results` | POST   | Placeholder endpoint for flight results | No |
-
-Duffel Flight Search
-| Endpoint             | Method | Description                          | Auth Required |
-| --------             | ------ | -----------                          | ------------- |
-| `/api/duffel/search` | POST   | Search flight offers from Duffel API | No |
+| Endpoint                              | Method | Description                                       | Auth Required |
+| --------                              | ------ | -----------                                       | ------------- |
+| `/api/results/:flight_search_id`      | GET    | Get saved flight results by flight search ID      | No            |
 
 Selected Flights
 | Endpoint                | Method | Description              | Auth Required |
@@ -116,11 +92,13 @@ QUICK FRONTEND NOTES
    - GET /api/auth/profile
    - POST /api/flights/search
 
-3. Duffel search
-   - Requires DUFFEL_API_KEY in the backend .env file.
+3. Flight search saves results to database
+   - POST /api/flights/search returns both flight_search_id and flight results in one call.
+   - Each result includes a flight_result_id linking to the saved DB record.
+   - No separate Duffel API call needed.
 
-4. Placeholder endpoint
-   - POST /api/results/results currently only returns a test message.
+4. Retrieve saved results
+   - GET /api/results/:flight_search_id returns all saved offers for a given search.
 
 5. Not yet implemented as API routes
    - Passenger APIs
@@ -178,10 +156,7 @@ Flight Search:
 - POST /api/flights/search
 
 Flight Results:
-- POST /api/results/results
-
-Duffel Flight Search:
-- POST /api/duffel/search
+- GET /api/results/:flight_search_id
 
 Selected Flights:
 - POST /api/selected-flights
@@ -414,8 +389,8 @@ Status: 401
 FLIGHT SEARCH APIS
 ============================================================
 
-1. Create Flight Search
------------------------
+1. Search and Create Flight Search
+----------------------------------
 
 Method:
 POST
@@ -432,7 +407,8 @@ Authorization: Bearer <jwt_token>
 Content-Type: application/json
 
 Description:
-Creates a flight search record for the logged in user and stores one or more search segments.
+Creates a flight search record for the logged in user, stores one or more search segments,
+and returns flight offers from the Duffel API in a single request.
 
 Request Body:
 
@@ -478,14 +454,36 @@ Allowed trip_type Values:
 Notes:
 - This endpoint uses the logged in user's email from the JWT token.
 - The service inserts data into flight_searches and flight_search_segments.
+- The endpoint also queries the Duffel API using the first segment's origin and destination.
+- If Duffel API fails, the search is still created but results will be empty.
 
 Success Response:
 Status: 201
 
 {
     "message": "Flight search created successfully",
-    "flight_search_id": "uuid-value"
+    "flight_search_id": "uuid-value",
+    "results": [
+        {
+            "flight_result_id": "uuid-value",
+            "flight_offer_id": "off_0000000000000000",
+            "airline_name": "Singapore Airlines",
+            "airline_code": "SQ",
+            "total_price": "120.00",
+            "currency_code": "USD",
+            "departure_airport": "BKK",
+            "arrival_airport": "SIN",
+            "departure_datetime": "2026-07-10T09:00:00",
+            "arrival_datetime": "2026-07-10T12:30:00",
+            "total_stop_count": 0,
+            "cabin_class": "economy"
+        }
+    ]
 }
+
+Notes:
+- Each result object includes flight_result_id — the UUID of the saved row in flight_results.
+- Use this flight_result_id when calling POST /api/selected-flights.
 
 Error Responses:
 
@@ -509,95 +507,60 @@ Status: 401
 FLIGHT RESULTS APIS
 ============================================================
 
-1. Flight Results Placeholder
------------------------------
+1. Get Saved Flight Results
+----------------------------
 
 Method:
-POST
+GET
 
 Endpoint:
-/api/results/results
+/api/results/:flight_search_id
 
 Auth Required:
 No
 
 Description:
-Current placeholder endpoint for flight results. It does not currently read request body data or search real results.
+Returns all saved flight results for a given flight_search_id, including segment details.
+Results are ordered by total_fare_price ascending (cheapest first).
+This data is populated when POST /api/flights/search is called.
 
-Request Body:
-No request body is required by the current implementation.
+URL Parameter:
+- flight_search_id (UUID) — the ID returned by POST /api/flights/search
 
-Success Response:
-Status: 200
-
-{
-    "message": "Results endpoint working"
-}
-
-Implementation Note:
-This route is currently a placeholder in src/routes/flightResultRoutes.js.
-
-
-============================================================
-DUFFEL FLIGHT SEARCH APIS
-============================================================
-
-1. Search Flights Through Duffel
---------------------------------
-
-Method:
-POST
-
-Endpoint:
-/api/duffel/search
-
-Auth Required:
-No
-
-Headers:
-
-Content-Type: application/json
-
-Description:
-Searches flight offers from the Duffel API and returns mapped flight results.
-
-Request Body:
-
-{
-    "origin": "BKK",
-    "destination": "SIN",
-    "departure_date": "2026-07-10"
-}
-
-Required Fields:
-- origin
-- destination
-- departure_date
-
-Notes:
-- origin and destination should be IATA airport codes.
-- departure_date should use YYYY-MM-DD format.
-- The backend sends one adult passenger and economy cabin class to Duffel.
-- This endpoint requires DUFFEL_API_KEY to be configured in the backend environment.
+Example Request:
+GET /api/results/e7144f32-0885-4f44-93b9-bbfef6186d6a
 
 Success Response:
 Status: 200
 
 {
-    "total_results": 1,
+    "flight_search_id": "e7144f32-0885-4f44-93b9-bbfef6186d6a",
+    "total_results": 2,
     "results": [
         {
+            "flight_result_id": "uuid-value",
             "flight_offer_id": "off_0000000000000000",
             "airline_name": "Singapore Airlines",
-            "airline_code": "SQ",
-            "total_price": "120.00",
-            "currency_code": "USD",
-            "departure_airport": "BKK",
-            "arrival_airport": "SIN",
-            "departure_datetime": "2026-07-10T09:00:00",
-            "arrival_datetime": "2026-07-10T12:30:00",
+            "total_duration": "PT2H30M",
             "total_stop_count": 0,
-            "cabin_class": "economy"
+            "cabin_class": "ECONOMY",
+            "total_fare_price": "120.00",
+            "currency_code": "USD",
+            "direct_flight_flag": true,
+            "flight_result_status": "AVAILABLE",
+            "result_generated_timestamp": "2026-06-22T10:00:00.000Z",
+            "segments": [
+                {
+                    "segment_number": 1,
+                    "departure_airport_code": "BKK",
+                    "arrival_airport_code": "SIN",
+                    "departure_datetime": "2026-07-10T09:00:00",
+                    "arrival_datetime": "2026-07-10T11:30:00",
+                    "marketing_carrier_code": "SQ",
+                    "flight_number": "SQ705",
+                    "segment_duration": "PT2H30M"
+                }
+            ]
         }
     ]
 }
@@ -679,8 +642,8 @@ Allowed selected_trip_type Values:
 
 Notes:
 - flight_search_id must already exist in the flight_searches table.
-- flight_result_id is required by the database.
-- flight_offer_id is accepted by the controller, but the current database schema does not include a flight_offer_id column in selected_flights. If this column has not been added manually, this endpoint may fail.
+- flight_result_id must be a valid UUID from the flight_results table — use the value returned by POST /api/flights/search.
+- flight_offer_id is the Duffel offer ID returned in the search results.
 
 Success Response:
 Status: 201
@@ -730,15 +693,19 @@ Typical user flow:
 
 3. Store token from login response.
 
-4. Create a flight search:
+4. Search flights:
    POST /api/flights/search
    Header: Authorization: Bearer <token>
+   Response includes flight_search_id and results array.
+   Each result includes a flight_result_id.
 
-5. Search Duffel offers:
-   POST /api/duffel/search
+5. (Optional) Retrieve saved results later:
+   GET /api/results/:flight_search_id
+   Returns all saved offers with segment details.
 
 6. Select one returned flight:
    POST /api/selected-flights
+   Use flight_result_id from step 4 or 5.
 
 7. Get logged in profile when needed:
    GET /api/auth/profile
@@ -767,4 +734,12 @@ PORT
 JWT_SECRET
 JWT_EXPIRES_IN
 DUFFEL_API_KEY
-Database connection variables used by config/db.js
+DATABASE_URL    Full PostgreSQL connection string (Supabase pooler URL)
+
+Example .env:
+
+    PORT=3000
+    JWT_SECRET=your_jwt_secret
+    JWT_EXPIRES_IN=1d
+    DUFFEL_API_KEY=your_duffel_api_key
+    DATABASE_URL=postgresql://user:password@host:5432/postgres

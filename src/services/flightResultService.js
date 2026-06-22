@@ -87,17 +87,13 @@ async (
             aircraft_code,
             aircraft_type,
 
-            segment_duration,
-
-            fare_basis_code,
-
-            cabin_class
+            segment_duration
         )
         VALUES
         (
             $1,$2,$3,$4,$5,$6,
             $7,$8,$9,$10,$11,
-            $12,$13,$14
+            $12
         )
         `,
         [
@@ -105,37 +101,25 @@ async (
 
             segmentNumber,
 
-            segment.origin.iata_code,
+            segment.origin?.iata_code || 'UNK',
 
-            segment.destination.iata_code,
+            segment.destination?.iata_code || 'UNK',
 
             segment.departing_at,
 
             segment.arriving_at,
 
-            segment.marketing_carrier
-                ?.iata_code,
+            segment.marketing_carrier?.iata_code || 'XX',
 
-            segment.operating_carrier
-                ?.iata_code,
+            segment.operating_carrier?.iata_code || null,
 
-            segment
-                .marketing_carrier_flight_number,
+            segment.marketing_carrier_flight_number || 'UNKNOWN',
 
-            segment.aircraft
-                ?.iata_code,
+            segment.aircraft?.iata_code || null,
 
-            segment.aircraft
-                ?.name,
+            segment.aircraft?.name || null,
 
-            segment.duration,
-
-            segment.passengers?.[0]
-                ?.fare_basis_code,
-
-            segment.passengers?.[0]
-                ?.cabin_class
-                ?.toUpperCase()
+            segment.duration || 'PT0H'
         ]
     );
 };

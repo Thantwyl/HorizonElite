@@ -1,6 +1,15 @@
 const flightSearchService =
 require("../services/flightSearchService");
 
+const duffelService =
+require("../services/duffelService");
+
+const flightResultMapper =
+require("../services/flightResultMapper");
+
+const flightResultService =
+require("../services/flightResultService");
+
 const createFlightSearch = async (
     req,
     res
@@ -22,6 +31,7 @@ const createFlightSearch = async (
 
         }
 
+        // Create flight search record
         const flightSearchId =
             await flightSearchService
             .createFlightSearch(
@@ -29,13 +39,121 @@ const createFlightSearch = async (
                 req.body
             );
 
+        // Get first segment to search Duffel
+        const firstSegment = segments[0];
+
+        // Call Duffel API
+        let duffelResults = [];
+        try {
+            const duffelResponse =
+                await duffelService
+                .searchFlights(
+                    firstSegment.origin_airport_code,
+                    firstSegment.destination_airport_code,
+                    firstSegment.departure_date
+                );
+
+            // Debug: log response structure
+            // console.log(
+            //     "Duffel Response Structure:",
+            //     JSON.stringify(duffelResponse, null, 2).slice(0, 500)
+            // );
+
+            // Handle different response structures
+            const offers = 
+                duffelResponse.offers || 
+                duffelResponse.data?.offers || 
+                [];
+
+            if (!Array.isArray(offers)) {
+                console.warn(
+                    "Offers is not an array:",
+                    typeof offers
+                );
+                duffelResults = [];
+            } else {
+
+                // Save each offer to DB and map for response
+                for (const offer of offers) {
+                    try {
+
+                        const flightResultId =
+                            await flightResultService
+                            .saveFlightResult(
+                                flightSearchId,
+                                offer
+                            );
+
+                        const segments =
+                            offer.slices?.[0]?.segments || [];
+
+                        for (
+                            let i = 0;
+                            i < segments.length;
+                            i++
+                        ) {
+                            try {
+                                await flightResultService
+                                .saveResultSegment(
+                                    flightResultId,
+                                    segments[i],
+                                    i + 1
+                                );
+                            } catch (segErr) {
+                                console.error(
+                                    "Segment save error:",
+                                    segErr.message
+                                );
+                            }
+                        }
+
+                        const mapped =
+                            flightResultMapper
+                            .mapDuffelOffer(offer);
+
+                        duffelResults.push({
+                            flight_result_id:
+                                flightResultId,
+                            ...mapped
+                        });
+
+                    } catch (saveErr) {
+                        console.error(
+                            "Result save error:",
+                            saveErr.message
+                        );
+                        duffelResults.push(
+                            flightResultMapper
+                            .mapDuffelOffer(offer)
+                        );
+                    }
+                }
+
+            }
+        }
+        catch(duffelError) {
+            console.error(
+                "Duffel API Error:",
+                duffelError.message
+            );
+            console.error(
+                "Full error:",
+                duffelError
+            );
+            // Don't fail entire request if Duffel fails
+            duffelResults = [];
+        }
+
         return res.status(201).json({
 
             message:
                 "Flight search created successfully",
 
             flight_search_id:
-                flightSearchId
+                flightSearchId,
+
+            results:
+                duffelResults
 
         });
 

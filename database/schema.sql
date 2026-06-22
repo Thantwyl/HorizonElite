@@ -298,7 +298,7 @@ CREATE TABLE selected_flights (
 
     flight_search_id UUID NOT NULL,
 
-    flight_result_id VARCHAR(36) NOT NULL,
+    flight_result_id UUID NOT NULL,
 
     selected_trip_type VARCHAR(20) NOT NULL,
 

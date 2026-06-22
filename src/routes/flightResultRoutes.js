@@ -6,14 +6,16 @@ console.log(
     "Flight Result Routes Loaded"
 );
 
-router.post(
-    "/results",
-    (req, res) => {
-        // Your handler logic here
-        res.json({
-            message: "Results endpoint working"
-        });
-    }
+const {
+    getResultsBySearchId
+} = require(
+    "../controllers/flightResultController"
+);
+
+// GET saved flight results by search ID
+router.get(
+    "/:flight_search_id",
+    getResultsBySearchId
 );
 
 module.exports = router;
