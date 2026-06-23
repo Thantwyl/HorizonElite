@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const pool = require("./config/db");
+const pool = require("./src/config/db");
 
 require("dotenv").config();
 
@@ -24,6 +24,12 @@ require("./src/routes/selectedFlightRoutes");
 
 const passengerRoutes =
 require("./src/routes/passengerRoutes");
+
+const bookingRoutes =
+require("./src/routes/bookingRoutes");
+
+const paymentRoutes =
+require("./src/routes/paymentRoutes");
 
 const app = express();
 
@@ -72,6 +78,15 @@ app.use(
     passengerRoutes
 );
 
+app.use(
+    "/api/bookings",
+    bookingRoutes
+);
+
+app.use(
+    "/api/payments",
+    paymentRoutes
+);
 /*
 |--------------------------------------------------------------------------
 | Health Check

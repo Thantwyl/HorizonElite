@@ -110,7 +110,7 @@ async (req, res) => {
 
 };
 
-const pool = require("../../config/db");
+const pool = require("../config/db");
 
 const getResultsBySearchId =
 async (req, res) => {

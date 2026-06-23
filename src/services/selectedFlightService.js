@@ -1,5 +1,5 @@
 const pool =
-require("../../config/db");
+require("../config/db");
 
 const createSelectedFlight =
 async (data) => {
