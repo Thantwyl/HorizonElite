@@ -86,8 +86,8 @@ Passengers
 | `/api/passengers/:passengerId`         | DELETE | Delete passenger from booking               | No |
 
 Bookings
-| Endpoint        | Method | Description                                            | Auth Required |
-| --------        | ------ | -----------                                            | ------------- |
+| Endpoint        | Method | Description                                               | Auth Required |
+| --------        | ------ | -----------                                               | ------------- |
 | `/api/bookings` | POST   | Create booking with flight and passengers (generates PNR) | No |
 
 Payments
@@ -96,6 +96,14 @@ Payments
 | `/api/payment/test`       | GET    | Test payment gateway connection                | No |
 | `/api/payment/create`     | POST   | Create payment record for booking              | No |
 | `/api/payment/charge`     | POST   | Process payment transaction through Omise      | No |
+
+Translations
+| Endpoint                                 | Method | Description                                | Auth Required |
+| --------                                 | ------ | -----------                                | ------------- |
+| `/api/translations/supported-languages`  | GET    | Get list of supported languages            | No |
+| `/api/translations/translate`            | POST   | Translate text to target language          | No |
+| `/api/translations/bulk-translate`       | POST   | Translate multiple texts in single request | No |
+| `/api/translations/flight-content/:lang` | GET    | Get translated flight-related content      | No |
 
 
 QUICK FRONTEND NOTES
@@ -137,6 +145,13 @@ QUICK FRONTEND NOTES
 
 8. Complete booking flow
    - Register → Login → Select Flight → Create Passengers → Create Booking → Process Payment
+
+9. Multi-language Support
+   - GET /api/translations/supported-languages to get available languages.
+   - POST /api/translations/translate to translate single text.
+   - POST /api/translations/bulk-translate to translate multiple texts at once (up to 100 items).
+   - GET /api/translations/flight-content/:lang to get pre-translated UI terms.
+   - Use language codes (en, th, zh, ja, ko, es, fr, de, vi, id, hi, ar, my) in requests.
 
 
 GENERAL NOTES
@@ -205,6 +220,12 @@ Payments:
 - GET /api/payment/test
 - POST /api/payment/create
 - POST /api/payment/charge
+
+Translations:
+- GET /api/translations/supported-languages
+- POST /api/translations/translate
+- POST /api/translations/bulk
+- GET /api/translations/flight-content/:lang
 
 
 ============================================================
@@ -1272,6 +1293,417 @@ Status: 500
 Status: 400
 {
     "error": "Invalid payment token"
+}
+
+
+============================================================
+TRANSLATION APIS
+============================================================
+
+1. Get Supported Languages
+---------------------------
+
+Method:
+GET
+
+Endpoint:
+/api/translations/supported-languages
+
+Auth Required:
+No
+
+Description:
+Returns a list of all supported languages for translation services.
+
+Success Response:
+Status: 200
+
+{
+    "message": "Supported languages retrieved successfully",
+    "total_languages": 13,
+    "languages": [
+        {
+            "language_code": "en",
+            "language_name": "English",
+            "native_name": "English",
+            "is_default": true
+        },
+        {
+            "language_code": "th",
+            "language_name": "Thai",
+            "native_name": "ไทย",
+            "is_default": false
+        },
+        {
+            "language_code": "zh",
+            "language_name": "Chinese",
+            "native_name": "中文",
+            "is_default": false
+        },
+        {
+            "language_code": "ja",
+            "language_name": "Japanese",
+            "native_name": "日本語",
+            "is_default": false
+        },
+        {
+            "language_code": "ko",
+            "language_name": "Korean",
+            "native_name": "한국어",
+            "is_default": false
+        },
+        {
+            "language_code": "es",
+            "language_name": "Spanish",
+            "native_name": "Español",
+            "is_default": false
+        },
+        {
+            "language_code": "fr",
+            "language_name": "French",
+            "native_name": "Français",
+            "is_default": false
+        },
+        {
+            "language_code": "de",
+            "language_name": "German",
+            "native_name": "Deutsch",
+            "is_default": false
+        },
+        {
+            "language_code": "vi",
+            "language_name": "Vietnamese",
+            "native_name": "Tiếng Việt",
+            "is_default": false
+        },
+        {
+            "language_code": "id",
+            "language_name": "Indonesian",
+            "native_name": "Bahasa Indonesia",
+            "is_default": false
+        },
+        {
+            "language_code": "hi",
+            "language_name": "Hindi",
+            "native_name": "हिन्दी",
+            "is_default": false
+        },
+        {
+            "language_code": "ar",
+            "language_name": "Arabic",
+            "native_name": "العربية",
+            "is_default": false
+        },
+        {
+            "language_code": "my",
+            "language_name": "Myanmar",
+            "native_name": "မြန်မာ",
+            "is_default": false
+        }
+    ]
+}
+
+Error Response:
+
+Status: 500
+{
+    "error": "Error message"
+}
+
+
+2. Translate Text
+-----------------
+
+Method:
+POST
+
+Endpoint:
+/api/translations/translate
+
+Auth Required:
+No
+
+Headers:
+
+Content-Type: application/json
+
+Description:
+Translates provided text from source language to target language.
+
+Request Body:
+
+{
+    "text": "Singapore Airlines flight SQ705 from Bangkok to Singapore",
+    "source_language": "en",
+    "target_language": "th"
+}
+
+Required Fields:
+- text (string to translate)
+- source_language (ISO 639-1 language code)
+- target_language (ISO 639-1 language code)
+
+Optional Fields:
+- None
+
+Notes:
+- source_language defaults to "en" if not specified.
+- target_language must be from the supported languages list.
+- Maximum text length: 5000 characters per request.
+- For translating multiple texts, use the bulk translation endpoint.
+
+Success Response:
+Status: 200
+
+{
+    "message": "Translation successful",
+    "original_text": "Singapore Airlines flight SQ705 from Bangkok to Singapore",
+    "translated_text": "สายการบินสิงคโปร์เที่ยวบินSQ705จากกรุงเทพไปสิงคโปร์",
+    "source_language": "en",
+    "target_language": "th",
+    "character_count": 58,
+    "translation_timestamp": "2026-06-22T12:00:00.000Z"
+}
+
+Error Responses:
+
+Status: 400
+{
+    "error": "Text is required"
+}
+
+Status: 400
+{
+    "error": "Unsupported target language"
+}
+
+Status: 400
+{
+    "error": "Text exceeds maximum length of 5000 characters"
+}
+
+Status: 500
+{
+    "error": "Translation service error"
+}
+
+
+3. Bulk Translate Text
+----------------------
+
+Method:
+POST
+
+Endpoint:
+/api/translations/bulk
+
+Auth Required:
+No
+
+Headers:
+
+Content-Type: application/json
+
+Description:
+Translates multiple texts in a single request from source language to target language.
+Useful for translating multiple flight information, booking details, or UI elements at once.
+
+Request Body:
+
+{
+  "source_language": "en",
+  "target_language": "es",
+  "texts": {
+    "search_flights": "Search flights",
+    "from": "From",
+    "to": "To",
+    "departure_date": "Departure date",
+    "return_date": "Return date",
+    "passengers": "Passengers",
+    "payment": "Payment",
+    "login": "Login"
+  }
+}
+
+Required Fields:
+- texts (array of strings to translate, minimum 1, maximum 100 items)
+- source_language (ISO 639-1 language code)
+- target_language (ISO 639-1 language code)
+
+Optional Fields:
+- None
+
+Notes:
+- source_language defaults to "en" if not specified.
+- target_language must be from the supported languages list.
+- Maximum 100 texts per request.
+- Total combined character count must not exceed 10000 characters.
+- Empty strings in the array are skipped.
+
+Success Response:
+Status: 200
+
+{
+    "message": "Bulk translation successful",
+    "source_language": "en",
+    "target_language": "es",
+    "total_items": 8,
+    "character_count": 67,
+    "translations": {
+        "search_flights": "Buscar vuelos",
+        "from": "De",
+        "to": "A",
+        "departure_date": "Fecha de salida",
+        "return_date": "Fecha de devolución",
+        "passengers": "Pasajeros",
+        "payment": "Pago",
+        "login": "Acceso"
+    },
+    "translation_timestamp": "2026-06-23T12:07:46.700Z"
+}
+
+Error Responses:
+
+Status: 400
+{
+    "error": "Texts array is required"
+}
+
+Status: 400
+{
+    "error": "Texts array is empty"
+}
+
+Status: 400
+{
+    "error": "Maximum 100 texts allowed per request"
+}
+
+Status: 400
+{
+    "error": "Total character count exceeds maximum of 10000 characters"
+}
+
+Status: 400
+{
+    "error": "Unsupported target language"
+}
+
+Status: 500
+{
+    "error": "Bulk translation service error"
+}
+
+
+4. Get Translated Flight Content
+---------------------------------
+
+Method:
+GET
+
+Endpoint:
+/api/translations/flight-content/:lang
+
+Auth Required:
+No
+
+Description:
+Retrieves pre-translated flight-related content terms and phrases for a specific language.
+Useful for displaying consistent terminology throughout the UI.
+
+URL Parameter:
+- lang (ISO 639-1 language code) — the target language code
+
+Example Request:
+GET /api/translations/flight-content/th
+
+Success Response:
+Status: 200
+
+{
+    "message": "Flight content retrieved successfully",
+    "language": "th",
+    "language_name": "Thai",
+    "content": {
+        "common_terms": {
+            "flight": "เที่ยวบิน",
+            "departure": "เดินทาง",
+            "arrival": "มาถึง",
+            "passenger": "ผู้โดยสาร",
+            "cabin_class": "ชั้นที่นั่ง",
+            "round_trip": "ไป-กลับ",
+            "one_way": "เที่ยวเดียว",
+            "multi_city": "หลายเมืองหลายเที่ยวบิน",
+            "booking": "จองตั๋ว",
+            "payment": "ชำระเงิน"
+        },
+        "cabin_classes": {
+            "economy": "ชั้นเศรษฐกิจ",
+            "premium_economy": "ชั้นเศรษฐกิจพรีเมียม",
+            "business": "ชั้นธุรกิจ",
+            "first_class": "ชั้นหนึ่ง"
+        },
+        "passenger_types": {
+            "adult": "ผู้ใหญ่",
+            "child": "เด็ก",
+            "infant": "ทารก"
+        },
+        "booking_status": {
+            "pending_payment": "รอชำระเงิน",
+            "paid_unticketed": "ชำระเงินแล้ว ยังไม่ได้ตั๋ว",
+            "ticketed": "ได้ตั๋วแล้ว",
+            "cancelled": "ยกเลิก",
+            "refunded": "คืนเงิน"
+        },
+        "buttons_and_actions": {
+            "search": "ค้นหา",
+            "select": "เลือก",
+            "book_now": "จองเดี๋ยวนี้",
+            "continue": "ต่อไป",
+            "confirm": "ยืนยัน",
+            "cancel": "ยกเลิก",
+            "edit": "แก้ไข",
+            "save": "บันทึก",
+            "delete": "ลบ",
+            "back": "กลับ"
+        },
+        "messages": {
+            "no_flights_found": "ไม่พบเที่ยวบิน",
+            "search_success": "ค้นหาเที่ยวบินสำเร็จ",
+            "booking_confirmed": "จองแล้วยืนยัน",
+            "payment_successful": "ชำระเงินสำเร็จ",
+            "error_occurred": "เกิดข้อผิดพลาด",
+            "loading": "กำลังโหลด...",
+            "please_wait": "โปรดรอสักครู่"
+        },
+        "labels": {
+            "from": "จาก",
+            "to": "ถึง",
+            "date": "วันที่",
+            "time": "เวลา",
+            "duration": "ระยะเวลา",
+            "stops": "จำนวนการหยุด",
+            "price": "ราคา",
+            "currency": "สกุลเงิน"
+        }
+    }
+}
+
+Error Responses:
+
+Status: 400
+{
+    "error": "Invalid language code"
+}
+
+Status: 404
+{
+    "error": "Language not supported"
+}
+
+Status: 500
+{
+    "error": "Error retrieving flight content"
 }
 
 

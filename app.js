@@ -7,6 +7,9 @@ require("dotenv").config();
 console.log("APP.JS LOADED");
 console.log("Flight Result Routes Registered");
 
+const translationRoutes =
+require("./src/routes/translationRoutes");
+
 const authRoutes =
 require("./src/routes/authRoutes");
 
@@ -47,6 +50,12 @@ app.use(express.json());
 | Routes
 |--------------------------------------------------------------------------
 */
+
+app.use(
+    "/api/translations",
+    translationRoutes
+);
+
 
 app.use(
     "/api/auth",
