@@ -78,6 +78,25 @@ Selected Flights
 | --------                | ------ | -----------              | ------------- |
 | `/api/selected-flights` | POST   | Save the selected flight | No |
 
+Passengers
+| Endpoint                               | Method | Description                                 | Auth Required |
+| --------                               | ------ | -----------                                 | ------------- |
+| `/api/passengers`                      | POST   | Create a new passenger record               | No |
+| `/api/passengers/:selectedFlightId`    | GET    | Get passengers by selected flight           | No |
+| `/api/passengers/:passengerId`         | DELETE | Delete passenger from booking               | No |
+
+Bookings
+| Endpoint        | Method | Description                                            | Auth Required |
+| --------        | ------ | -----------                                            | ------------- |
+| `/api/bookings` | POST   | Create booking with flight and passengers (generates PNR) | No |
+
+Payments
+| Endpoint                  | Method | Description                                    | Auth Required |
+| --------                  | ------ | -----------                                    | ------------- |
+| `/api/payment/test`       | GET    | Test payment gateway connection                | No |
+| `/api/payment/create`     | POST   | Create payment record for booking              | No |
+| `/api/payment/charge`     | POST   | Process payment transaction through Omise      | No |
+
 
 QUICK FRONTEND NOTES
 --------------------
@@ -100,11 +119,24 @@ QUICK FRONTEND NOTES
 4. Retrieve saved results
    - GET /api/results/:flight_search_id returns all saved offers for a given search.
 
-5. Not yet implemented as API routes
-   - Passenger APIs
-   - Booking APIs
-   - Payment APIs
-   - Ticketing APIs
+5. Passenger Management
+   - POST /api/passengers creates individual passenger records.
+   - Save the passenger_id from each response.
+   - Create one passenger record per traveler.
+
+6. Booking Creation
+   - POST /api/bookings creates a booking with selected flight and passengers.
+   - Pass an array of passenger_ids when creating booking.
+   - Response includes pnr_reference (unique 6-char booking code).
+   - Booking starts in PENDING_PAYMENT status.
+
+7. Payment Processing
+   - POST /api/payment/create creates a payment record for the booking.
+   - POST /api/payment/charge processes the actual payment through Omise gateway.
+   - After successful payment, booking status updates to PAID_UNTICKETED.
+
+8. Complete booking flow
+   - Register → Login → Select Flight → Create Passengers → Create Booking → Process Payment
 
 
 GENERAL NOTES
@@ -160,6 +192,19 @@ Flight Results:
 
 Selected Flights:
 - POST /api/selected-flights
+
+Passengers:
+- POST /api/passengers
+- GET /api/passengers/:selectedFlightId
+- DELETE /api/passengers/:passengerId
+
+Bookings:
+- POST /api/bookings
+
+Payments:
+- GET /api/payment/test
+- POST /api/payment/create
+- POST /api/payment/charge
 
 
 ============================================================
@@ -713,17 +758,557 @@ Typical user flow:
 
 
 ============================================================
-ENDPOINTS NOT YET IMPLEMENTED
+PASSENGER APIS
 ============================================================
 
-The database schema contains tables for passengers, bookings, booking_passengers, and payments.
-However, the current Express app does not expose API routes for those resources yet.
+1. Create Passenger
+-------------------
 
-Not currently available:
-- Passenger create/update APIs
-- Booking create/list/detail APIs
-- Payment APIs
-- Ticketing APIs
+Method:
+POST
+
+Endpoint:
+/api/passengers
+
+Auth Required:
+No
+
+Headers:
+
+Content-Type: application/json
+
+Description:
+Creates a new passenger record with personal and travel document information.
+
+Request Body:
+
+{
+    "pi_title": "Mr",
+    "pi_first_name": "John",
+    "pi_middle_name": "Michael",
+    "pi_last_name": "Doe",
+    "pi_gender": "M",
+    "pi_date_of_birth": "1990-05-15",
+    "pi_nationality": "Thai",
+    "pi_passenger_type_code": "ADT",
+    "pi_passport_number": "A12345678",
+    "pi_passport_issuing_country": "Thailand",
+    "pi_passport_expiry_date": "2030-12-31",
+    "pi_contact_email": "john@example.com",
+    "pi_contact_phone": "0812345678"
+}
+
+Required Fields:
+- pi_title (Mr, Mrs, Ms, etc.)
+- pi_first_name
+- pi_last_name
+- pi_gender (M, F, X)
+- pi_date_of_birth (YYYY-MM-DD)
+- pi_nationality
+- pi_passenger_type_code (ADT=Adult, CHD=Child, INF=Infant)
+- pi_contact_email
+- pi_contact_phone
+
+Optional Fields:
+- pi_middle_name
+- pi_passport_number
+- pi_passport_issuing_country
+- pi_passport_expiry_date
+
+Success Response:
+Status: 201
+
+{
+    "message": "Passenger created successfully",
+    "passenger": {
+        "passenger_id": "uuid-value",
+        "pi_title": "Mr",
+        "pi_first_name": "John",
+        "pi_middle_name": "Michael",
+        "pi_last_name": "Doe",
+        "pi_gender": "M",
+        "pi_date_of_birth": "1990-05-15",
+        "pi_nationality": "Thai",
+        "pi_passenger_type_code": "ADT",
+        "pi_passport_number": "A12345678",
+        "pi_passport_issuing_country": "Thailand",
+        "pi_passport_expiry_date": "2030-12-31",
+        "pi_contact_email": "john@example.com",
+        "pi_contact_phone": "0812345678",
+        "pi_passenger_status": "ACTIVE",
+        "date_created": "2026-06-22T10:00:00.000Z",
+        "date_modified": "2026-06-22T10:00:00.000Z"
+    }
+}
+
+Error Response:
+
+Status: 500
+{
+    "error": "Error message"
+}
+
+
+2. Get Passengers by Selected Flight
+-------------------------------------
+
+Method:
+GET
+
+Endpoint:
+/api/passengers/:selectedFlightId
+
+Auth Required:
+No
+
+Description:
+Retrieves all passengers associated with a specific selected flight.
+
+URL Parameter:
+- selectedFlightId (UUID) — the ID of the selected flight
+
+Example Request:
+GET /api/passengers/e7144f32-0885-4f44-93b9-bbfef6186d6a
+
+Success Response:
+Status: 200
+
+[
+    {
+        "passenger_id": "uuid-value",
+        "pi_title": "Mr",
+        "pi_first_name": "John",
+        "pi_last_name": "Doe",
+        "pi_gender": "M",
+        "pi_date_of_birth": "1990-05-15",
+        "pi_nationality": "Thai",
+        "pi_passenger_type_code": "ADT",
+        "pi_passport_number": "A12345678",
+        "pi_passport_issuing_country": "Thailand",
+        "pi_passport_expiry_date": "2030-12-31",
+        "pi_contact_email": "john@example.com",
+        "pi_contact_phone": "0812345678",
+        "pi_passenger_status": "ACTIVE"
+    },
+    {
+        "passenger_id": "uuid-value",
+        "pi_title": "Mrs",
+        "pi_first_name": "Jane",
+        "pi_last_name": "Doe",
+        "pi_gender": "F",
+        "pi_date_of_birth": "1992-08-20",
+        "pi_nationality": "Thai",
+        "pi_passenger_type_code": "ADT",
+        "pi_passport_number": "A87654321",
+        "pi_passport_issuing_country": "Thailand",
+        "pi_passport_expiry_date": "2029-03-15",
+        "pi_contact_email": "jane@example.com",
+        "pi_contact_phone": "0887654321",
+        "pi_passenger_status": "ACTIVE"
+    }
+]
+
+Error Response:
+
+Status: 500
+{
+    "error": "Error message"
+}
+
+
+3. Delete Passenger
+-------------------
+
+Method:
+DELETE
+
+Endpoint:
+/api/passengers/:passengerId
+
+Auth Required:
+No
+
+Description:
+Removes a passenger record from a booking.
+
+URL Parameter:
+- passengerId (UUID) — the ID of the passenger to delete
+
+Example Request:
+DELETE /api/passengers/e7144f32-0885-4f44-93b9-bbfef6186d6a
+
+Success Response:
+Status: 200
+
+{
+    "message": "Passenger removed successfully",
+    "passenger": {
+        "passenger_id": "uuid-value",
+        "pi_title": "Mr",
+        "pi_first_name": "John",
+        "pi_last_name": "Doe",
+        "pi_passenger_status": "REMOVED",
+        "date_modified": "2026-06-22T10:30:00.000Z"
+    }
+}
+
+Error Response:
+
+Status: 500
+{
+    "error": "Error message"
+}
+
+
+============================================================
+BOOKING APIS
+============================================================
+
+1. Create Booking
+-----------------
+
+Method:
+POST
+
+Endpoint:
+/api/bookings
+
+Auth Required:
+No
+
+Headers:
+
+Content-Type: application/json
+
+Description:
+Creates a new booking with selected flight and passengers. Generates a 6-character PNR (Passenger Name Record).
+The booking starts in PENDING_PAYMENT status.
+
+Request Body:
+
+{
+    "user_email_address": "john@example.com",
+    "selected_flight_id": "e7144f32-0885-4f44-93b9-bbfef6186d6a",
+    "passenger_ids": [
+        "uuid-passenger-1",
+        "uuid-passenger-2"
+    ],
+    "total_payment_amount": 240.00,
+    "currency_code": "USD",
+    "trip_type": "ONE_WAY",
+    "cabin_class": "ECONOMY",
+    "fare_brand_id": "fare_brand_001"
+}
+
+Required Fields:
+- user_email_address
+- selected_flight_id (UUID)
+- passenger_ids (array of passenger UUIDs, at least 1)
+- total_payment_amount (decimal, > 0)
+- currency_code (e.g., USD, THB, SGD)
+- trip_type (ONE_WAY, ROUND_TRIP, MULTI_CITY)
+- cabin_class (ECONOMY, PREMIUM_ECONOMY, BUSINESS, FIRST_CLASS)
+
+Optional Fields:
+- fare_brand_id
+
+Notes:
+- A unique PNR is automatically generated for the booking.
+- Booking status is set to PENDING_PAYMENT by default.
+- Ticketing status is set to UNTICKETED by default.
+
+Success Response:
+Status: 201
+
+{
+    "message": "Booking created successfully",
+    "booking": {
+        "pnr_reference": "ABC123",
+        "user_email_address": "john@example.com",
+        "selected_flight_id": "e7144f32-0885-4f44-93b9-bbfef6186d6a",
+        "booking_status": "PENDING_PAYMENT",
+        "ticketing_status": "UNTICKETED",
+        "total_payment_amount": "240.00",
+        "currency_code": "USD",
+        "booking_date_timestamp": "2026-06-22T10:45:00.000Z",
+        "booking_created_at": "2026-06-22T10:45:00.000Z",
+        "booking_updated_at": "2026-06-22T10:45:00.000Z",
+        "passengers": [
+            {
+                "passenger_id": "uuid-passenger-1",
+                "pi_first_name": "John",
+                "pi_last_name": "Doe",
+                "pi_passenger_type_code": "ADT"
+            },
+            {
+                "passenger_id": "uuid-passenger-2",
+                "pi_first_name": "Jane",
+                "pi_last_name": "Doe",
+                "pi_passenger_type_code": "ADT"
+            }
+        ]
+    }
+}
+
+Booking Status Values:
+- PENDING_PAYMENT: Payment not yet received
+- PAID_UNTICKETED: Payment received, waiting for ticketing
+- TICKETED: Tickets issued
+- CANCELLED: Booking cancelled
+- REFUNDED: Refund processed
+
+Ticketing Status Values:
+- UNTICKETED: No tickets issued yet
+- TICKETED: Tickets have been issued
+- FAILED: Ticketing failed
+
+Error Response:
+
+Status: 500
+{
+    "error": "Error message"
+}
+
+
+============================================================
+PAYMENT APIS
+============================================================
+
+1. Test Payment Gateway Connection
+-----------------------------------
+
+Method:
+GET
+
+Endpoint:
+/api/payment/test
+
+Auth Required:
+No
+
+Description:
+Tests the connection to the Omise payment gateway to verify it is operational.
+
+Success Response:
+Status: 200
+
+{
+    "message": "Payment service connected",
+    "connection": {
+        "gateway": "Omise",
+        "status": "CONNECTED",
+        "timestamp": "2026-06-22T10:50:00.000Z"
+    }
+}
+
+Error Response:
+
+Status: 500
+{
+    "error": "Error message"
+}
+
+
+2. Create Payment Record
+------------------------
+
+Method:
+POST
+
+Endpoint:
+/api/payment/create
+
+Auth Required:
+No
+
+Headers:
+
+Content-Type: application/json
+
+Description:
+Creates a new payment record for a booking. This initiates the payment process but does not charge yet.
+
+Request Body:
+
+{
+    "pnr_reference": "ABC123",
+    "user_email_address": "john@example.com",
+    "payment_method": "CREDIT_CARD",
+    "payment_region": "ASIA",
+    "currency_code": "USD",
+    "total_payment_amount": 240.00,
+    "payment_token": "tokn_test_123456"
+}
+
+Required Fields:
+- pnr_reference (6-character booking reference)
+- user_email_address
+- payment_method (CREDIT_CARD, DEBIT_CARD, BANK_TRANSFER, etc.)
+- payment_region (ASIA, EUROPE, AMERICAS, etc.)
+- currency_code
+- total_payment_amount (decimal, > 0)
+
+Optional Fields:
+- payment_token (from payment gateway)
+
+Notes:
+- Payment status is set to PENDING by default.
+- The payment record links to the booking via PNR reference.
+
+Success Response:
+Status: 201
+
+{
+    "message": "Payment created",
+    "payment": {
+        "payment_id": "uuid-value",
+        "pnr_reference": "ABC123",
+        "user_email_address": "john@example.com",
+        "payment_method": "CREDIT_CARD",
+        "payment_region": "ASIA",
+        "currency_code": "USD",
+        "total_payment_amount": "240.00",
+        "payment_token": "tokn_test_123456",
+        "three_ds_status": null,
+        "payment_status_code": "PENDING",
+        "payment_timestamp": "2026-06-22T10:55:00.000Z"
+    }
+}
+
+Payment Status Codes:
+- PENDING: Payment initiated, awaiting processing
+- PAID: Payment successfully processed
+- FAILED: Payment transaction failed
+- REFUNDED: Payment refunded
+- VOIDED: Payment voided
+
+3DS Status Values:
+- AUTHENTICATED: 3D Secure authentication passed
+- ATTEMPTED: 3D Secure attempted
+- FAILED: 3D Secure authentication failed
+
+Error Response:
+
+Status: 500
+{
+    "error": "Error message"
+}
+
+
+3. Charge Payment (Process Transaction)
+----------------------------------------
+
+Method:
+POST
+
+Endpoint:
+/api/payment/charge
+
+Auth Required:
+No
+
+Headers:
+
+Content-Type: application/json
+
+Description:
+Processes the payment transaction through the Omise payment gateway. This actually charges the payment method.
+
+Request Body:
+
+{
+    "payment_id": "uuid-value",
+    "pnr_reference": "ABC123",
+    "payment_token": "tokn_test_123456",
+    "amount": 240.00,
+    "currency": "USD",
+    "description": "Flight booking ABC123",
+    "return_uri": "https://frontend.example.com/payment/result",
+    "metadata": {
+        "booking_reference": "ABC123",
+        "user_email": "john@example.com"
+    }
+}
+
+Required Fields:
+- payment_id (UUID from create payment)
+- pnr_reference
+- payment_token
+- amount (in smallest currency unit, e.g., cents for USD)
+- currency (ISO 4217 code)
+
+Optional Fields:
+- description
+- return_uri (for 3D Secure redirect)
+- metadata (custom key-value pairs)
+
+Success Response:
+Status: 200
+
+{
+    "payment_id": "uuid-value",
+    "pnr_reference": "ABC123",
+    "payment_status_code": "PAID",
+    "gateway_transaction_reference": "chrg_test_123456",
+    "three_ds_status": "AUTHENTICATED",
+    "amount": "240.00",
+    "currency": "USD",
+    "payment_timestamp": "2026-06-22T11:00:00.000Z",
+    "message": "Payment processed successfully"
+}
+
+3D Secure Flow:
+- If 3D Secure is required, the response will include a redirect URL.
+- After user completes 3D Secure challenge, payment is finalized.
+- three_ds_status will show AUTHENTICATED or ATTEMPTED status.
+
+Error Response:
+
+Status: 500
+{
+    "error": "Error message"
+}
+
+Status: 400
+{
+    "error": "Invalid payment token"
+}
+
+
+============================================================
+TYPICAL BOOKING AND PAYMENT FLOW
+============================================================
+
+Complete end-to-end booking with payment:
+
+1. Register and Login (see Authentication APIs)
+
+2. Search and select flights (see Flight Search APIs)
+
+3. Create passengers:
+   POST /api/passengers
+   Repeat for each passenger. Save passenger_ids.
+
+4. Create booking:
+   POST /api/bookings
+   Use selected_flight_id and passenger_ids.
+   Save pnr_reference (booking reference).
+
+5. Create payment record:
+   POST /api/payment/create
+   Use pnr_reference and booking amount.
+
+6. Test payment gateway (optional):
+   GET /api/payment/test
+
+7. Process payment:
+   POST /api/payment/charge
+   Complete the transaction.
+   Booking status updates to PAID_UNTICKETED upon success.
+
+8. Booking is ready for ticketing:
+   booking_status = PAID_UNTICKETED
+   Tickets can now be issued via airline system.
 
 
 ============================================================
@@ -735,11 +1320,3 @@ JWT_SECRET
 JWT_EXPIRES_IN
 DUFFEL_API_KEY
 DATABASE_URL    Full PostgreSQL connection string (Supabase pooler URL)
-
-Example .env:
-
-    PORT=3000
-    JWT_SECRET=your_jwt_secret
-    JWT_EXPIRES_IN=1d
-    DUFFEL_API_KEY=your_duffel_api_key
-    DATABASE_URL=postgresql://user:password@host:5432/postgres
