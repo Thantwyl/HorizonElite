@@ -4,10 +4,15 @@ require("express");
 const router =
 express.Router();
 
+const authenticateUser =
+require("../middlewares/authMiddleware");
+
 const {
     createPayment,
     testOmise,
-    chargePayment
+    chargePayment,
+    simulatePaymentSuccess
+    
 } = require(
     "../controllers/paymentController"
 );
@@ -33,12 +38,20 @@ router.get(
 
 router.post(
     "/create",
+    authenticateUser,
     createPayment
 );
 
 router.post(
     "/charge",
+    authenticateUser,
     chargePayment
+);
+
+router.post(
+    "/simulate-success",
+    authenticateUser,
+    simulatePaymentSuccess
 );
 
 module.exports =

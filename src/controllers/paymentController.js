@@ -1,99 +1,144 @@
-const paymentService =
-require("../services/paymentService");
+    const paymentService =
+    require("../services/paymentService");
 
-const testOmise =
-async (req, res) => {
+    const testOmise =
+    async (req, res) => {
 
-    try {
+        try {
 
-        const connection =
-        await paymentService
-        .testConnection();
+            const connection =
+            await paymentService
+            .testConnection();
 
-        res.status(200).json({
+            res.status(200).json({
 
-            message:
-            "Payment service connected",
+                message:
+                "Payment service connected",
 
-            connection
+                connection
 
-        });
+            });
 
-    }
-    catch(error){
+        }
+        catch(error){
 
-        res.status(500).json({
+            res.status(
+                error.statusCode || 500
+            ).json({
 
-            error:
-            error.message
+                error:
+                error.message
 
-        });
+            });
 
-    }
+        }
 
-};
+    };
 
-const createPayment =
-async (req, res) => {
+    const createPayment =
+    async (req, res) => {
 
-    try {
+        try {
 
-        const payment =
-        await paymentService
-        .createPayment(req.body);
+            const payment =
+            await paymentService
+            .createPayment({
+                ...req.body,
+                actor_email_address:
+                req.user?.email_address
+            });
 
-        res.status(201).json({
+            res.status(201).json({
 
-            message:
-            "Payment created",
+                message:
+                "Payment created",
 
-            payment
+                payment
 
-        });
+            });
 
-    }
-    catch(error){
+        }
+        catch(error){
 
-        res.status(500).json({
+            res.status(500).json({
 
-            error:
-            error.message
+                error:
+                error.message
 
-        });
+            });
 
-    }
+        }
 
-};
+    };
 
-const chargePayment =
-async (req,res) => {
+    const chargePayment =
+    async (req,res) => {
 
-    try {
+        try {
 
-        const result =
-        await paymentService
-        .chargePayment(req.body);
+            const result =
+            await paymentService
+            .chargePayment(req.body);
 
-        res.status(200).json(result);
+            res.status(200).json(result);
 
-    }
-    catch(error){
+        }
+        catch(error){
 
-        res.status(500).json({
+            res.status(500).json({
 
-            error:
-            error.message
+                error:
+                error.message
 
-        });
+            });
 
-    }
+        }
 
-};
+    };
 
-module.exports = {
+    const simulatePaymentSuccess =
+    async (req, res) => {
 
-    testOmise,
-    createPayment,
-    chargePayment
+        try {
 
-};
+            const { payment_id } = req.body;
+
+            if (!payment_id) {
+
+                return res.status(400).json({
+                    error: "payment_id is required"
+                });
+
+            }
+
+            const payment =
+            await paymentService
+            .simulatePaymentSuccess(payment_id);
+
+            res.status(200).json({
+                message: "Payment marked as PAID",
+                payment
+            });
+
+        }
+        catch(error){
+
+            res.status(500).json({
+
+                error:
+                error.message
+
+            });
+
+        }
+
+    };
+
+    module.exports = {
+
+        testOmise,
+        createPayment,
+        chargePayment,
+        simulatePaymentSuccess
+
+    };

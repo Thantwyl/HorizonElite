@@ -50,7 +50,20 @@ const createFlightSearch = async (
                 .searchFlights(
                     firstSegment.origin_airport_code,
                     firstSegment.destination_airport_code,
-                    firstSegment.departure_date
+                    firstSegment.departure_date,
+                    {
+                        adult_passenger_count:
+                        req.body.adult_passenger_count,
+
+                        child_passenger_count:
+                        req.body.child_passenger_count,
+
+                        infant_passenger_count:
+                        req.body.infant_passenger_count,
+
+                        cabin_class:
+                        req.body.cabin_class
+                    }
                 );
 
             // Debug: log response structure

@@ -34,6 +34,9 @@ require("./src/routes/bookingRoutes");
 const paymentRoutes =
 require("./src/routes/paymentRoutes");
 
+const duffelOrderRoutes =
+require("./src/routes/duffelOrderRoutes");
+
 const app = express();
 
 app.use(cors({
@@ -96,6 +99,12 @@ app.use(
     "/api/payments",
     paymentRoutes
 );
+
+app.use(
+    "/api/duffel/orders",
+    duffelOrderRoutes
+);
+
 /*
 |--------------------------------------------------------------------------
 | Health Check

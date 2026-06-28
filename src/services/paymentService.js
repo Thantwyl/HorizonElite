@@ -32,12 +32,87 @@ const createPayment = async (data) => {
 
         booking_id,
         pnr_reference,
-        user_email_address,
+        actor_email_address,
         payment_method,
         currency_code,
         total_payment_amount
 
     } = data;
+
+    if (!booking_id && !pnr_reference) {
+        const error = new Error(
+            "booking_id or pnr_reference is required"
+        );
+        error.statusCode = 400;
+        throw error;
+    }
+
+    const bookingLookupResult =
+    await pool.query(
+        `
+        SELECT
+            booking_id,
+            pnr_reference,
+            user_email_address,
+            currency_code,
+            total_payment_amount
+        FROM bookings
+        WHERE
+            ($1::uuid IS NOT NULL AND booking_id = $1)
+            OR
+            ($2::char(6) IS NOT NULL AND pnr_reference = $2)
+        ORDER BY booking_created_at DESC
+        LIMIT 1
+        `,
+        [
+            booking_id || null,
+            pnr_reference || null
+        ]
+    );
+
+    if (bookingLookupResult.rows.length === 0) {
+        const error = new Error(
+            "Booking not found for payment"
+        );
+        error.statusCode = 400;
+        throw error;
+    }
+
+    const booking = bookingLookupResult.rows[0];
+
+    const resolvedBookingId =
+    booking.booking_id || booking_id;
+
+    const resolvedPnr =
+    booking.pnr_reference;
+
+    const resolvedUserEmail =
+    booking.user_email_address;
+
+    if (
+        actor_email_address &&
+        actor_email_address !== resolvedUserEmail
+    ) {
+        const error = new Error(
+            "You are not allowed to pay for this booking"
+        );
+        error.statusCode = 403;
+        throw error;
+    }
+
+    const resolvedCurrency =
+    currency_code || booking.currency_code;
+
+    const resolvedAmount =
+    total_payment_amount || booking.total_payment_amount;
+
+    if (!payment_method) {
+        const error = new Error(
+            "payment_method is required"
+        );
+        error.statusCode = 400;
+        throw error;
+    }
 
     const result = await pool.query(
 
@@ -63,12 +138,12 @@ const createPayment = async (data) => {
         `,
         [
 
-            booking_id,
-            pnr_reference,
-            user_email_address,
+            resolvedBookingId,
+            resolvedPnr,
+            resolvedUserEmail,
             payment_method,
-            currency_code,
-            total_payment_amount
+            resolvedCurrency,
+            resolvedAmount
 
         ]
 
@@ -111,10 +186,52 @@ const chargePayment = async (data) => {
 
 };
 
+/*
+|--------------------------------------------------------------------------
+| Simulate Payment Success (Development Only)
+|--------------------------------------------------------------------------
+*/
+
+const simulatePaymentSuccess = async (payment_id) => {
+
+    const result = await pool.query(
+        `
+        UPDATE payments
+        SET
+
+            payment_status_code = 'PAID',
+
+            gateway_transaction_reference =
+                'SIM_' || substr(md5(random()::text),1,12),
+
+            payment_timestamp = NOW(),
+
+            updated_at = NOW()
+
+        WHERE payment_id = $1
+
+        RETURNING *
+        `,
+        [payment_id]
+    );
+
+    if(result.rows.length === 0){
+
+        throw new Error("Payment not found");
+
+    }
+
+    return result.rows[0];
+
+};
+
 module.exports = {
 
     testConnection,
     createPayment,
-    chargePayment
+    chargePayment,
+    simulatePaymentSuccess
 
 };
+
+

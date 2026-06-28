@@ -1,14 +1,34 @@
 const passengerService =
 require("../services/passengerService");
 
+const {
+    validatePassengerPayload
+} = require(
+    "../../validations/passengerValidation"
+);
+
 const createPassenger =
 async (req, res) => {
 
     try {
 
+        const {
+            errors,
+            normalized
+        } = validatePassengerPayload(
+            req.body
+        );
+
+        if (errors.length > 0) {
+            return res.status(400).json({
+                error: "Validation failed",
+                details: errors
+            });
+        }
+
         const passenger =
         await passengerService.createPassenger(
-            req.body
+            normalized
         );
 
         res.status(201).json({
@@ -21,7 +41,9 @@ async (req, res) => {
 
         console.error(error);
 
-        res.status(500).json({
+        res.status(
+            error.statusCode || 500
+        ).json({
             error: error.message
         });
 
@@ -46,7 +68,9 @@ async (req, res) => {
 
         console.error(error);
 
-        res.status(500).json({
+        res.status(
+            error.statusCode || 500
+        ).json({
             error: error.message
         });
 
@@ -75,7 +99,9 @@ async (req, res) => {
 
         console.error(error);
 
-        res.status(500).json({
+        res.status(
+            error.statusCode || 500
+        ).json({
             error: error.message
         });
 

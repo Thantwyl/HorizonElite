@@ -4,8 +4,33 @@ require("../config/db");
 const generatePNR =
 require("../utils/generatePNR");
 
-const createBooking = async (
+const getPassengerType =
+(passengerTypeCode) => {
+    const value =
+    (passengerTypeCode || "")
+    .toString()
+    .trim()
+    .toUpperCase();
 
+    if (
+        value === "INF" ||
+        value === "INFANT"
+    ) {
+        return "infant";
+    }
+
+    if (
+        value === "CHD" ||
+        value === "CNN" ||
+        value === "CHILD"
+    ) {
+        return "child";
+    }
+
+    return "adult";
+};
+
+const createBooking = async (
     user_email_address,
     selected_flight_id,
     passenger_ids,
@@ -14,48 +39,160 @@ const createBooking = async (
     trip_type,
     cabin_class,
     fare_brand_id
-
 ) => {
 
-    const client =
-    await pool.connect();
+    const client = await pool.connect();
+
+    console.log("========== BOOKING SERVICE ==========");
+    console.log({
+        user_email_address,
+        selected_flight_id,
+        passenger_ids,
+        total_payment_amount,
+        currency_code,
+        trip_type,
+        cabin_class,
+        fare_brand_id
+    });
+    console.log("=====================================");
 
     try {
 
         await client.query("BEGIN");
+        console.log("STEP 1 - BEGIN finished");
 
-        const pnr_reference =
-        generatePNR();
+        const userResult = await client.query(
+            `
+            SELECT email_address
+            FROM users
+            WHERE email_address = $1
+            `,
+            [user_email_address]
+        );
 
-        const bookingQuery = `
-        INSERT INTO bookings (
+        console.log("STEP 2 - User verified");
 
-            pnr_reference,
-            user_email_address,
-            selected_flight_id,
-            booking_status,
-            ticketing_status,
-            total_payment_amount,
-            currency_code,
-            trip_type,
-            cabin_class,
-            fare_brand_id
+        if (userResult.rows.length === 0) {
+            throw new Error("User not found");
+        }
 
-        )
-        VALUES (
-            $1,$2,$3,
-            'PENDING_PAYMENT',
-            'UNTICKETED',
-            $4,$5,$6,$7,$8
-        )
-        RETURNING *;
-        `;
+        const selectedFlightQuery = await client.query(
+            `
+            SELECT
+                sf.selected_flight_id,
+                sf.flight_search_id,
+                fs.adult_passenger_count,
+                fs.child_passenger_count,
+                fs.infant_passenger_count
+            FROM selected_flights sf
+            INNER JOIN flight_searches fs
+                ON sf.flight_search_id = fs.flight_search_id
+            WHERE sf.selected_flight_id = $1
+            `,
+            [selected_flight_id]
+        );
 
-        const bookingResult =
-        await client.query(
+        console.log("STEP 3 - Selected flight verified");
 
-            bookingQuery,
+        if (selectedFlightQuery.rows.length === 0) {
+            throw new Error("Selected flight not found");
+        }
 
+        if (!Array.isArray(passenger_ids) || passenger_ids.length === 0) {
+            throw new Error("Passenger ids required");
+        }
+
+        const uniquePassengerIds = [...new Set(passenger_ids)];
+
+        const passengerResult = await client.query(
+            `
+            SELECT
+                passenger_id,
+                selected_flight_id,
+                pi_passenger_type_code
+            FROM passengers
+            WHERE passenger_id = ANY($1::uuid[])
+            `,
+            [uniquePassengerIds]
+        );
+
+        console.log("STEP 4 - Passenger query finished");
+
+        if (passengerResult.rows.length !== uniquePassengerIds.length) {
+            throw new Error("Passenger not found");
+        }
+
+        const expected = selectedFlightQuery.rows[0];
+
+        const actualCount = {
+            adult: 0,
+            child: 0,
+            infant: 0
+        };
+
+        for (const passengerRow of passengerResult.rows) {
+
+            const type =
+                getPassengerType(
+                    passengerRow.pi_passenger_type_code
+                );
+
+            actualCount[type]++;
+
+        }
+
+        const expectedCount = {
+            adult: Number(expected.adult_passenger_count || 0),
+            child: Number(expected.child_passenger_count || 0),
+            infant: Number(expected.infant_passenger_count || 0)
+        };
+
+        for (const type of ["adult", "child", "infant"]) {
+
+            if (actualCount[type] !== expectedCount[type]) {
+
+                throw new Error(
+                    `${type} passenger count mismatch`
+                );
+
+            }
+
+        }
+
+        const pnr_reference = generatePNR();
+
+        console.log("STEP 4.5 - Ready to insert booking");
+
+        const bookingResult = await client.query(
+            `
+            INSERT INTO bookings
+            (
+                pnr_reference,
+                user_email_address,
+                selected_flight_id,
+                booking_status,
+                ticketing_status,
+                total_payment_amount,
+                currency_code,
+                trip_type,
+                cabin_class,
+                fare_brand_id
+            )
+            VALUES
+            (
+                $1,
+                $2,
+                $3,
+                'PENDING_PAYMENT',
+                'UNTICKETED',
+                $4,
+                $5,
+                $6,
+                $7,
+                $8
+            )
+            RETURNING *;
+            `,
             [
                 pnr_reference,
                 user_email_address,
@@ -66,52 +203,58 @@ const createBooking = async (
                 cabin_class,
                 fare_brand_id
             ]
-
         );
 
-        const booking =
-        bookingResult.rows[0];
+        console.log("STEP 5 - Booking inserted");
 
-        for(const passenger_id
-            of passenger_ids) {
+        const booking = bookingResult.rows[0];
+
+        console.log("Booking ID:", booking.booking_id);
+
+        for (const passenger_id of uniquePassengerIds) {
+
+            console.log("STEP 5.1 - Linking passenger", passenger_id);
 
             await client.query(
-
                 `
-                INSERT INTO
-                booking_passengers (
-
+                INSERT INTO booking_passengers
+                (
                     booking_id,
                     passenger_id
-
                 )
-                VALUES (
+                VALUES
+                (
                     $1,
                     $2
                 )
                 `,
-
                 [
                     booking.booking_id,
                     passenger_id
                 ]
-
             );
+
+            console.log("Passenger linked:", passenger_id);
 
         }
 
-        await client.query(
-            "COMMIT"
-        );
+        console.log("STEP 6 - About to COMMIT");
+
+        await client.query("COMMIT");
+
+        console.log("STEP 7 - COMMIT successful");
+
+        console.log("STEP 8 - Returning booking");
 
         return booking;
 
     }
-    catch(error) {
+    catch (error) {
 
-        await client.query(
-            "ROLLBACK"
-        );
+        console.log("BOOKING ERROR:");
+        console.log(error);
+
+        await client.query("ROLLBACK");
 
         throw error;
 

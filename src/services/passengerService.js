@@ -19,6 +19,23 @@ const createPassenger = async (passengerData) => {
         pi_contact_phone
     } = passengerData;
 
+    const selectedFlightResult = await pool.query(
+        `
+        SELECT selected_flight_id
+        FROM selected_flights
+        WHERE selected_flight_id = $1
+        `,
+        [selected_flight_id]
+    );
+
+    if (selectedFlightResult.rows.length === 0) {
+        const error = new Error(
+            "selected_flight_id not found"
+        );
+        error.statusCode = 400;
+        throw error;
+    }
+
     const result = await pool.query(
         `
         INSERT INTO passengers

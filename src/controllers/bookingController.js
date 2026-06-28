@@ -3,12 +3,13 @@ require("../services/bookingService");
 
 const createBooking =
 async (req, res) => {
-
+    console.log("========== BOOKING REQUEST ==========");
+    console.log(req.body);
+    console.log("=====================================");
     try {
 
         const {
 
-            user_email_address,
             selected_flight_id,
             passenger_ids,
             total_payment_amount,
@@ -19,11 +20,21 @@ async (req, res) => {
 
         } = req.body;
 
+        const userEmailAddress =
+        req.user?.email_address ||
+        req.body.user_email_address;
+
+        if (!userEmailAddress) {
+            return res.status(400).json({
+                error: "user_email_address is required"
+            });
+        }
+
         const booking =
         await bookingService
         .createBooking(
 
-            user_email_address,
+            userEmailAddress,
             selected_flight_id,
             passenger_ids,
             total_payment_amount,
@@ -33,7 +44,10 @@ async (req, res) => {
             fare_brand_id
 
         );
-
+        
+        console.log("========== CONTROLLER RESPONSE ==========");
+        console.log(booking);
+        console.log("=========================================");
         res.status(201).json({
 
             message:
@@ -48,7 +62,9 @@ async (req, res) => {
 
         console.error(error);
 
-        res.status(500).json({
+        res.status(
+            error.statusCode || 500
+        ).json({
 
             error:
             error.message

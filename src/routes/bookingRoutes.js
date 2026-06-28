@@ -4,6 +4,9 @@ require("express");
 const router =
 express.Router();
 
+const authenticateUser =
+require("../middlewares/authMiddleware");
+
 const {
     createBooking
 } = require(
@@ -12,6 +15,7 @@ const {
 
 router.post(
     "/",
+    authenticateUser,
     createBooking
 );
 
