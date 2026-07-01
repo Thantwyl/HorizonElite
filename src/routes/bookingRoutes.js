@@ -4,8 +4,11 @@ require("express");
 const router =
 express.Router();
 
-const authenticateUser =
-require("../middlewares/authMiddleware");
+// const authenticateUser =
+// require("../middlewares/authMiddleware");
+
+const optionalAuthMiddleware =
+require("../middlewares/optionalAuthMiddleware");
 
 const {
     createBooking
@@ -15,7 +18,7 @@ const {
 
 router.post(
     "/",
-    authenticateUser,
+    optionalAuthMiddleware,
     createBooking
 );
 

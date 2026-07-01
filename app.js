@@ -37,6 +37,9 @@ require("./src/routes/paymentRoutes");
 const duffelOrderRoutes =
 require("./src/routes/duffelOrderRoutes");
 
+const manageBookingRoutes =
+require("./src/routes/manageBookingRoutes");
+
 const app = express();
 
 app.use(cors({
@@ -103,6 +106,11 @@ app.use(
 app.use(
     "/api/duffel/orders",
     duffelOrderRoutes
+);
+
+app.use(
+    "/api/manage-booking",
+    manageBookingRoutes
 );
 
 /*

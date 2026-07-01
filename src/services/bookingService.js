@@ -68,13 +68,16 @@ const createBooking = async (
             WHERE email_address = $1
             `,
             [user_email_address]
-        );
+            );
 
-        console.log("STEP 2 - User verified");
+            const is_guest =
+            userResult.rows.length === 0;
 
-        if (userResult.rows.length === 0) {
-            throw new Error("User not found");
-        }
+            console.log("STEP 2 - User Checked");
+
+            console.log({
+                is_guest
+            });
 
         const selectedFlightQuery = await client.query(
             `
@@ -169,6 +172,7 @@ const createBooking = async (
             (
                 pnr_reference,
                 user_email_address,
+                is_guest,
                 selected_flight_id,
                 booking_status,
                 ticketing_status,
@@ -183,19 +187,21 @@ const createBooking = async (
                 $1,
                 $2,
                 $3,
+                $4,
                 'PENDING_PAYMENT',
                 'UNTICKETED',
-                $4,
                 $5,
                 $6,
                 $7,
-                $8
+                $8,
+                $9
             )
             RETURNING *;
             `,
             [
                 pnr_reference,
                 user_email_address,
+                is_guest,
                 selected_flight_id,
                 total_payment_amount,
                 currency_code,

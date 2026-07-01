@@ -7,6 +7,10 @@ async (req, res) => {
     console.log(req.body);
     console.log("=====================================");
     try {
+        console.log("========== REQUEST ARRIVED ==========");
+        console.log("req.user =", req.user);
+        console.log("req.body =", req.body);
+        console.log("=====================================");
 
         const {
 
