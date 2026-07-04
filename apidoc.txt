@@ -6,7 +6,7 @@ API Version: 1.0.0
 Default Base URL: http://localhost:3000
 Swagger UI: http://localhost:3000/api-docs
 
-Last updated: 2026-06-22
+Last updated: 2026-07-04
 
 
 INSTALLATION
@@ -96,6 +96,11 @@ Payments
 | `/api/payment/test`       | GET    | Test payment gateway connection                | No |
 | `/api/payment/create`     | POST   | Create payment record for booking              | No |
 | `/api/payment/charge`     | POST   | Process payment transaction through Omise      | No |
+
+Duffel Orders
+| Endpoint                    | Method | Description                                          | Auth Required |
+| --------                    | ------ | -----------                                          | ------------- |
+| `/api/duffel/orders/create` | POST   | Create Duffel order using paid booking and payment   | No |
 
 Translations
 | Endpoint                                 | Method | Description                                | Auth Required |
@@ -220,6 +225,9 @@ Payments:
 - GET /api/payment/test
 - POST /api/payment/create
 - POST /api/payment/charge
+
+Duffel Orders:
+- POST /api/duffel/orders/create
 
 Translations:
 - GET /api/translations/supported-languages
@@ -1293,6 +1301,102 @@ Status: 500
 Status: 400
 {
     "error": "Invalid payment token"
+}
+
+
+============================================================
+DUFFEL ORDER APIS
+============================================================
+
+1. Create Duffel Order
+----------------------
+
+Method:
+POST
+
+Endpoint:
+/api/duffel/orders/create
+
+Auth Required:
+No
+
+Headers:
+
+Content-Type: application/json
+
+Description:
+Creates a Duffel order from an existing booking and payment.
+This endpoint validates booking/payment records, checks payment is paid,
+maps local passengers to Duffel passenger payload, creates an order at Duffel,
+and saves the Duffel response in the local duffel_orders table.
+
+Request Body:
+
+{
+    "booking_id": "uuid-booking-id",
+    "payment_id": "uuid-payment-id"
+}
+
+Required Fields:
+- booking_id (UUID)
+- payment_id (UUID)
+
+Notes:
+- payment_id must belong to an existing payment record.
+- payment status must already be PAID.
+- booking must have at least one valid passenger.
+- selected flight must have a valid Duffel offer ID.
+- if Duffel says the offer is expired/unavailable, this API returns 409 and
+  marks related local selected flight / flight result as expired.
+
+Success Response:
+Status: 201
+
+{
+    "message": "Duffel Order Created",
+    "order": {
+        "local_order": {
+            "duffel_order_id": "uuid-value",
+            "booking_id": "uuid-value",
+            "payment_id": "uuid-value",
+            "order_status": "PENDING_DUFFEL"
+        },
+        "duffel_order": {
+            "data": {
+                "id": "ord_XXXXXXXXXXXX",
+                "booking_reference": "ABC123"
+            }
+        }
+    }
+}
+
+Error Responses:
+
+Status: 400
+{
+    "error": "Invalid Duffel offer ID: off_... Run a new flight search, select a fresh result, then create the order again."
+}
+
+Status: 400
+{
+    "error": "Passenger type mismatch for adult: booking has 2, offer expects 1"
+}
+
+Status: 409
+{
+    "error": "Selected offer is no longer available. Please run a new flight search and select a new offer."
+}
+
+Status: 500
+{
+    "error": "Booking not found",
+    "details": null
+}
+
+Status: 500
+{
+    "error": "Payment not completed",
+    "details": null
 }
 
 
