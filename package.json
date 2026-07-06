@@ -21,6 +21,7 @@
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.11.0",
     "omise": "^1.1.0",
+    "pdfkit": "^0.19.1",
     "pg": "^8.22.0",
     "swagger-jsdoc": "^6.3.0",
     "swagger-ui-express": "^5.0.1",

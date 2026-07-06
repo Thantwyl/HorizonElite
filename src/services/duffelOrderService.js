@@ -102,6 +102,47 @@ const buildOfferUnavailableError = () => {
     return error;
 };
 
+const cleanupExpiredOfferPaymentState =
+async ({
+    bookingId,
+    payment
+}) => {
+
+    if (!payment || payment.payment_status_code !== "PAID") {
+        return;
+    }
+
+    const isSimulatedPayment =
+    (payment.gateway_transaction_reference || "")
+    .startsWith("SIM_");
+
+    await pool.query(
+        `
+        UPDATE bookings
+        SET
+            booking_status = 'CANCELLED',
+            ticketing_status = 'FAILED',
+            booking_updated_at = NOW()
+        WHERE booking_id = $1
+        `,
+        [bookingId]
+    );
+
+    if (isSimulatedPayment) {
+        await pool.query(
+            `
+            UPDATE payments
+            SET
+                payment_status_code = 'VOIDED',
+                updated_at = NOW()
+            WHERE payment_id = $1
+            `,
+            [payment.payment_id]
+        );
+    }
+
+};
+
 const createDuffelOrderService =
 async ({
     booking_id,
@@ -113,6 +154,7 @@ async ({
 
     let selectedFlightId = null;
     let selectedFlightResultId = null;
+    let paymentForCleanup = null;
 
     try {
 
@@ -122,33 +164,7 @@ async ({
 
         /*
         ----------------------------
-        Verify Booking
-        ----------------------------
-        */
-
-        const bookingResult =
-        await client.query(
-            `
-            SELECT *
-            FROM bookings
-            WHERE booking_id = $1
-            `,
-            [booking_id]
-        );
-
-        if (
-            bookingResult.rows.length === 0
-        ) {
-
-            throw new Error(
-                "Booking not found"
-            );
-
-        }
-
-        /*
-        ----------------------------
-        Verify Payment
+        Verify Payment (First)
         ----------------------------
         */
 
@@ -158,8 +174,12 @@ async ({
             SELECT *
             FROM payments
             WHERE payment_id = $1
+            AND booking_id = $2
             `,
-            [payment_id]
+            [
+                payment_id,
+                booking_id
+            ]
         );
 
         if (
@@ -174,6 +194,50 @@ async ({
 
         const payment =
         paymentResult.rows[0];
+
+        paymentForCleanup =
+        payment;
+
+        if (
+            payment.payment_status_code !==
+            "PAID"
+        ) {
+
+            throw new Error(
+                "Payment not completed"
+            );
+
+        }
+
+        /*
+        ----------------------------
+        Verify Booking (by PNR from payment)
+        ----------------------------
+        */
+
+        const bookingResult =
+        await client.query(
+            `
+            SELECT *
+            FROM bookings
+            WHERE booking_id = $1
+            AND pnr_reference = $2
+            `,
+            [
+                booking_id,
+                payment.pnr_reference
+            ]
+        );
+
+        if (
+            bookingResult.rows.length === 0
+        ) {
+
+            throw new Error(
+                "Booking not found"
+            );
+
+        }
 
         if (
             payment.payment_status_code !==
@@ -369,7 +433,7 @@ async ({
             booking_id
             ]
             );
-        
+
         /*
         --------------------------------
         Build Duffel Passenger Payload
@@ -393,7 +457,7 @@ async ({
                 'mx': 'mx',
                 'mx.': 'mx'
             };
-            
+
             return titleMap[titleLower] || 'mr'; // Default to 'mr' if unknown
         };
 
@@ -642,6 +706,11 @@ async ({
                         [selectedFlightResultId]
                     );
                 }
+
+                await cleanupExpiredOfferPaymentState({
+                    bookingId: booking_id,
+                    payment: paymentForCleanup
+                });
 
             }
             catch (statusUpdateError) {

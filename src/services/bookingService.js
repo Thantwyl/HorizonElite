@@ -273,6 +273,138 @@ const createBooking = async (
 
 };
 
+const getManageBooking = async (pnr, lastName) => {
+
+    const client = await pool.connect();
+
+    try {
+
+        const result = await client.query(
+            `
+            SELECT
+                b.booking_id,
+                b.pnr_reference,
+                b.booking_status,
+                b.ticketing_status,
+                b.total_payment_amount,
+                b.currency_code,
+                b.trip_type,
+                b.cabin_class,
+                b.is_guest,
+
+                sf.airline_name,
+                sf.flight_number,
+                sf.origin_airport_code,
+                sf.destination_airport_code,
+                sf.departure_datetime,
+                sf.arrival_datetime,
+
+                p.passenger_id,
+                p.pi_first_name,
+                p.pi_last_name,
+                p.pi_passenger_type_code,
+                p.pi_contact_email,
+                p.pi_contact_phone,
+
+                rs.segment_number,
+                rs.departure_airport_code,
+                rs.arrival_airport_code,
+                rs.departure_datetime AS segment_departure,
+                rs.arrival_datetime AS segment_arrival
+
+            FROM bookings b
+
+            JOIN selected_flights sf
+                ON sf.selected_flight_id = b.selected_flight_id
+
+            JOIN booking_passengers bp
+                ON bp.booking_id = b.booking_id
+
+            JOIN passengers p
+                ON p.passenger_id = bp.passenger_id
+
+            LEFT JOIN flight_results fr
+                ON fr.flight_search_id = sf.flight_search_id
+
+            LEFT JOIN result_segments rs
+                ON rs.flight_result_id = sf.flight_result_id
+
+            WHERE b.pnr_reference = $1
+            AND LOWER(p.pi_last_name) = LOWER($2)
+            `,
+            [pnr, lastName]
+        );
+
+        if (result.rows.length === 0) {
+            throw new Error("Booking not found");
+        }
+
+        // 🧠 GROUP DATA PROPERLY (IMPORTANT)
+        const booking = {
+            booking_id: result.rows[0].booking_id,
+            pnr_reference: result.rows[0].pnr_reference,
+            booking_status: result.rows[0].booking_status,
+            ticketing_status: result.rows[0].ticketing_status,
+            total_payment_amount: result.rows[0].total_payment_amount,
+            currency_code: result.rows[0].currency_code,
+            trip_type: result.rows[0].trip_type,
+            cabin_class: result.rows[0].cabin_class,
+            is_guest: result.rows[0].is_guest
+        };
+
+        const flight = {
+            airline_name: result.rows[0].airline_name,
+            flight_number: result.rows[0].flight_number,
+            origin: result.rows[0].origin_airport_code,
+            destination: result.rows[0].destination_airport_code,
+            departure: result.rows[0].departure_datetime,
+            arrival: result.rows[0].arrival_datetime
+        };
+
+        const passengersMap = new Map();
+
+        const segments = [];
+
+        for (const row of result.rows) {
+
+            // passengers unique
+            if (!passengersMap.has(row.passenger_id)) {
+                passengersMap.set(row.passenger_id, {
+                    passenger_id: row.passenger_id,
+                    first_name: row.pi_first_name,
+                    last_name: row.pi_last_name,
+                    type: row.pi_passenger_type_code,
+                    email: row.pi_contact_email,
+                    phone: row.pi_contact_phone
+                });
+            }
+
+            // segments unique
+            if (row.segment_number && !segments.find(s => s.segment_number === row.segment_number)) {
+                segments.push({
+                    segment_number: row.segment_number,
+                    departure: row.segment_departure,
+                    arrival: row.segment_arrival,
+                    from: row.departure_airport_code,
+                    to: row.arrival_airport_code
+                });
+            }
+        }
+
+        return {
+            booking,
+            flight,
+            passengers: Array.from(passengersMap.values()),
+            segments
+        };
+
+    } finally {
+        client.release();
+    }
+};
+
+
 module.exports = {
-    createBooking
+    createBooking,
+    getManageBooking
 };

@@ -93,9 +93,11 @@ Bookings
 Payments
 | Endpoint                  | Method | Description                                    | Auth Required |
 | --------                  | ------ | -----------                                    | ------------- |
-| `/api/payment/test`       | GET    | Test payment gateway connection                | No |
-| `/api/payment/create`     | POST   | Create payment record for booking              | No |
-| `/api/payment/charge`     | POST   | Process payment transaction through Omise      | No |
+| `/api/payments/hello`     | GET    | Check payment route wiring                     | No |
+| `/api/payments/test-omise`| GET    | Test payment gateway connection                | No |
+| `/api/payments/create`    | POST   | Create payment record for booking              | Yes |
+| `/api/payments/charge`    | POST   | Process payment transaction through Omise      | Yes |
+| `/api/payments/simulate-success` | POST | Mark a payment as PAID for testing     | Yes |
 
 Duffel Orders
 | Endpoint                    | Method | Description                                          | Auth Required |
@@ -144,14 +146,18 @@ QUICK FRONTEND NOTES
    - Booking starts in PENDING_PAYMENT status.
 
 7. Payment Processing
-   - POST /api/payment/create creates a payment record for the booking.
-   - POST /api/payment/charge processes the actual payment through Omise gateway.
+    - POST /api/payments/create creates a payment record for the booking.
+    - POST /api/payments/charge processes the actual payment through Omise gateway.
    - After successful payment, booking status updates to PAID_UNTICKETED.
 
-8. Complete booking flow
+8. Payment testing helpers
+    - GET /api/payments/test-omise checks gateway connectivity.
+    - POST /api/payments/simulate-success marks a payment as PAID for local testing.
+
+9. Complete booking flow
    - Register → Login → Select Flight → Create Passengers → Create Booking → Process Payment
 
-9. Multi-language Support
+10. Multi-language Support
    - GET /api/translations/supported-languages to get available languages.
    - POST /api/translations/translate to translate single text.
    - POST /api/translations/bulk-translate to translate multiple texts at once (up to 100 items).
@@ -172,7 +178,18 @@ GENERAL NOTES
 
    Authorization: Bearer <token>
 
-5. Common auth errors:
+4. Payment test endpoints now use the plural route group:
+
+    /api/payments/*
+
+5. Suggested testing phase for payment flow:
+
+    1. POST /api/payments/create with a real booking reference.
+    2. GET /api/payments/test-omise to verify the gateway connection.
+    3. POST /api/payments/charge to process the transaction.
+    4. If you need to fake a success in development, POST /api/payments/simulate-success.
+
+6. Common auth errors:
 
    401 Access Denied
    {
@@ -184,7 +201,7 @@ GENERAL NOTES
        "message": "Invalid Token"
    }
 
-6. Common server error:
+7. Common server error:
 
    500 Internal Server Error
    {
@@ -221,13 +238,32 @@ Passengers:
 Bookings:
 - POST /api/bookings
 
+E-Ticket Download:
+- GET /api/tickets/:bookingId
+
 Payments:
-- GET /api/payment/test
-- POST /api/payment/create
-- POST /api/payment/charge
+- GET /api/payments/hello
+- GET /api/payments/test-omise
+- POST /api/payments/create
+- POST /api/payments/charge
+- POST /api/payments/simulate-success
 
 Duffel Orders:
 - POST /api/duffel/orders/create
+
+Addons:
+- POST /api/addons
+- GET /api/addons/:booking_id
+- GET /api/addons/baggage/options
+- GET /api/addons/availability/:offerId
+- POST /api/addons/baggage/select
+
+Meals:
+- GET /api/meals
+
+Seats:
+- GET /api/seats/map/:offer_id
+- POST /api/seats/select
 
 Translations:
 - GET /api/translations/supported-languages
@@ -644,6 +680,283 @@ Error Response:
 Status: 500
 {
     "error": "Error message"
+}
+
+
+============================================================
+E-TICKET DOWNLOAD APIS
+============================================================
+
+1. Download E-Ticket
+--------------------
+
+Method:
+GET
+
+Endpoint:
+/api/tickets/:bookingId
+
+Auth Required:
+No
+
+Description:
+Downloads the e-ticket PDF for a completed booking.
+
+URL Parameter:
+- bookingId (UUID) — the booking ID used to generate the ticket
+
+Example Request:
+GET /api/tickets/e7144f32-0885-4f44-93b9-bbfef6186d6a
+
+Success Response:
+Status: 200
+
+Raw Response:
+Binary PDF file
+
+Error Response:
+
+Status: 500
+{
+    "error": "Error message"
+}
+
+
+============================================================
+ADDONS APIS
+============================================================
+
+1. Add Addon
+------------
+
+Method:
+POST
+
+Endpoint:
+/api/addons
+
+Auth Required:
+No
+
+Headers:
+
+Content-Type: application/json
+
+Description:
+Adds a new addon such as seat, meal, baggage, or other booking extras.
+
+Raw Request Body:
+
+{
+    "booking_id": "uuid-value",
+    "passenger_id": "uuid-passenger-value",
+    "addon_type": "MEAL",
+    "addon_code": "VGML",
+    "addon_name": "Vegetarian Meal",
+    "quantity": 1,
+    "price": 15.00,
+    "currency_code": "USD"
+}
+
+Success Response:
+Status: 201
+
+{
+    "message": "Addon added successfully",
+    "data": {
+        "booking_id": "uuid-value",
+        "addon_type": "MEAL",
+        "addon_code": "VGML"
+    }
+}
+
+2. Get Booking Addons
+---------------------
+
+Method:
+GET
+
+Endpoint:
+/api/addons/:booking_id
+
+Auth Required:
+No
+
+Description:
+Returns all addons saved for a booking.
+
+Example Request:
+GET /api/addons/e7144f32-0885-4f44-93b9-bbfef6186d6a
+
+Success Response:
+Status: 200
+
+{
+    "message": "Booking addons fetched",
+    "data": []
+}
+
+3. Get Baggage Options
+----------------------
+
+Method:
+GET
+
+Endpoint:
+/api/addons/baggage/options
+
+Auth Required:
+No
+
+Description:
+Returns available baggage options for the current booking flow.
+
+Success Response:
+Status: 200
+
+{
+    "message": "Baggage options fetched successfully",
+    "data": []
+}
+
+4. Get Addon Availability
+-------------------------
+
+Method:
+GET
+
+Endpoint:
+/api/addons/availability/:offerId
+
+Auth Required:
+No
+
+Description:
+Checks addon availability for a flight offer.
+
+Example Request:
+GET /api/addons/availability/off_0000000000000000
+
+5. Select Passenger Baggage
+---------------------------
+
+Method:
+POST
+
+Endpoint:
+/api/addons/baggage/select
+
+Auth Required:
+No
+
+Headers:
+
+Content-Type: application/json
+
+Description:
+Saves baggage selection for a specific passenger and flight booking.
+
+Raw Request Body:
+
+{
+    "booking_id": "uuid-value",
+    "passenger_id": "uuid-passenger-value",
+    "selected_flight_id": "uuid-flight-value",
+    "baggage_code": "BG20"
+}
+
+Success Response:
+Status: 200
+
+{
+    "message": "Passenger baggage added successfully.",
+    "data": {}
+}
+
+
+============================================================
+MEALS APIS
+============================================================
+
+1. Get Meal Options
+-------------------
+
+Method:
+GET
+
+Endpoint:
+/api/meals
+
+Auth Required:
+No
+
+Description:
+Returns the available meal options.
+
+Success Response:
+Status: 200
+
+{
+    "message": "Meal options fetched successfully",
+    "data": []
+}
+
+
+============================================================
+SEATS APIS
+============================================================
+
+1. Get Seat Map
+---------------
+
+Method:
+GET
+
+Endpoint:
+/api/seats/map/:offer_id
+
+Auth Required:
+No
+
+Description:
+Returns the seat map for a flight offer.
+
+Example Request:
+GET /api/seats/map/off_0000000000000000
+
+2. Select Seat
+--------------
+
+Method:
+POST
+
+Endpoint:
+/api/seats/select
+
+Auth Required:
+No
+
+Headers:
+
+Content-Type: application/json
+
+Description:
+Saves the selected seat for a passenger.
+
+Raw Request Body:
+
+{
+    "order_id": "uuid-order-value",
+    "passenger_id": "uuid-passenger-value",
+    "seat_id": "seat-12A"
+}
+
+Success Response:
+Status: 200
+
+{
+    "message": "Seat selected",
+    "data": {}
 }
 
 
@@ -1110,7 +1423,7 @@ Method:
 GET
 
 Endpoint:
-/api/payment/test
+/api/payments/test-omise
 
 Auth Required:
 No
@@ -1138,6 +1451,22 @@ Status: 500
 }
 
 
+Testing Phase Example:
+
+GET /api/payments/test-omise
+
+Expected raw response:
+
+{
+    "message": "Payment service connected",
+    "connection": {
+        "gateway": "Omise",
+        "status": "CONNECTED",
+        "timestamp": "2026-06-22T10:50:00.000Z"
+    }
+}
+
+
 2. Create Payment Record
 ------------------------
 
@@ -1145,10 +1474,10 @@ Method:
 POST
 
 Endpoint:
-/api/payment/create
+/api/payments/create
 
 Auth Required:
-No
+Yes
 
 Headers:
 
@@ -1183,6 +1512,18 @@ Optional Fields:
 Notes:
 - Payment status is set to PENDING by default.
 - The payment record links to the booking via PNR reference.
+
+Raw Test Payload:
+
+{
+    "pnr_reference": "ABC123",
+    "user_email_address": "john@example.com",
+    "payment_method": "CREDIT_CARD",
+    "payment_region": "ASIA",
+    "currency_code": "USD",
+    "total_payment_amount": 240.00,
+    "payment_token": "tokn_test_123456"
+}
 
 Success Response:
 Status: 201
@@ -1231,10 +1572,10 @@ Method:
 POST
 
 Endpoint:
-/api/payment/charge
+/api/payments/charge
 
 Auth Required:
-No
+Yes
 
 Headers:
 
@@ -1284,6 +1625,43 @@ Status: 200
     "currency": "USD",
     "payment_timestamp": "2026-06-22T11:00:00.000Z",
     "message": "Payment processed successfully"
+}
+
+
+4. Simulate Payment Success (Testing Only)
+-------------------------------------------
+
+Method:
+POST
+
+Endpoint:
+/api/payments/simulate-success
+
+Auth Required:
+Yes
+
+Headers:
+
+Content-Type: application/json
+
+Description:
+Marks an existing payment as PAID so the booking flow can be tested without a live gateway charge.
+
+Request Body:
+
+{
+    "payment_id": "uuid-value"
+}
+
+Success Response:
+Status: 200
+
+{
+    "message": "Payment marked as PAID",
+    "payment": {
+        "payment_id": "uuid-value",
+        "payment_status_code": "PAID"
+    }
 }
 
 3D Secure Flow:
@@ -1831,14 +2209,14 @@ Complete end-to-end booking with payment:
    Save pnr_reference (booking reference).
 
 5. Create payment record:
-   POST /api/payment/create
+    POST /api/payments/create
    Use pnr_reference and booking amount.
 
 6. Test payment gateway (optional):
-   GET /api/payment/test
+    GET /api/payments/test-omise
 
 7. Process payment:
-   POST /api/payment/charge
+    POST /api/payments/charge
    Complete the transaction.
    Booking status updates to PAID_UNTICKETED upon success.
 

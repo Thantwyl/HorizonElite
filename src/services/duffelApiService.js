@@ -6,8 +6,7 @@ const duffelHeaders = {
 
     "Duffel-Version": "v2",
 
-    "Content-Type":
-    "application/json"
+    "Content-Type": "application/json"
 };
 
 /*

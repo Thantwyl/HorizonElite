@@ -79,6 +79,83 @@ async (req, res) => {
 
 };
 
+const getManageBooking = async (req, res) => {
+
+    try {
+
+        const { pnr, lastName } = req.params;
+
+        const data = await bookingService.getManageBooking(
+            pnr,
+            lastName
+        );
+
+        res.json({
+            message: "Booking found",
+            data
+        });
+
+    } catch (error) {
+
+        res.status(404).json({
+            error: error.message
+        });
+
+    }
+};
+
+const bookingActionService =
+require("../services/bookingActionService");
+
+const getBookingActions =
+async (req,res)=>{
+
+    try{
+
+        const {
+
+            pnr,
+
+            lastName
+
+        } = req.params;
+
+        const actions =
+        await bookingActionService
+        .getBookingActions(
+
+            pnr,
+
+            lastName
+
+        );
+
+        return res.json({
+
+            message:
+            "Booking actions",
+
+            data:
+            actions
+
+        });
+
+    }
+    catch(error){
+
+        return res.status(404).json({
+
+            error:
+            error.message
+
+        });
+
+    }
+
+};
+
 module.exports = {
-    createBooking
+    createBooking,
+    getManageBooking,
+    getBookingActions
 };

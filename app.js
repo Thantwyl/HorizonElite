@@ -40,6 +40,24 @@ require("./src/routes/duffelOrderRoutes");
 const manageBookingRoutes =
 require("./src/routes/manageBookingRoutes");
 
+const ticketRoutes =
+require("./src/routes/ticketRoutes");
+
+const addonRoutes = 
+require("./src/routes/addonRoutes");
+
+const mealRoutes = 
+require("./src/routes/mealRoutes");
+
+const seatRoutes = 
+require("./src/routes/seatRoutes");
+
+const addonAvailabilityRoutes =
+require("./src/routes/addonAvailabilityRoutes");
+
+const baggageRoutes = 
+require("./src/routes/addonRoutes")
+
 const app = express();
 
 app.use(cors({
@@ -112,6 +130,37 @@ app.use(
     "/api/manage-booking",
     manageBookingRoutes
 );
+
+app.use(
+    "/api/tickets",
+    ticketRoutes
+);
+
+app.use(
+    "/api/addons", 
+    addonRoutes
+);
+
+app.use(
+    "/api/meals", 
+    mealRoutes
+);
+
+app.use(
+    "/api/seats",
+    seatRoutes
+);
+
+app.use(
+    "/api/addons",
+    addonAvailabilityRoutes
+);
+
+app.use(
+    "/api/addons/baggage/select",
+    addonRoutes
+);
+
 
 /*
 |--------------------------------------------------------------------------
