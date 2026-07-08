@@ -1,6 +1,13 @@
 const pool = require("../config/db");
 const omise = require("../config/omise");
 
+const isPaymentSimulationAllowed = () => {
+    return (
+        process.env.NODE_ENV !== "production" &&
+        process.env.ALLOW_PAYMENT_SIMULATION !== "false"
+    );
+};
+
 /*
 |--------------------------------------------------------------------------
 | Test Omise Connection
@@ -214,10 +221,10 @@ const chargePayment = async (data) => {
     } catch (omiseError) {
         // DEV FALLBACK: If token is not valid (common in dev), simulate success
         if (
+            isPaymentSimulationAllowed() &&
             omiseError &&
             (omiseError.message?.includes('token') ||
-             omiseError.message?.includes('not found') ||
-             process.env.NODE_ENV === 'development')
+             omiseError.message?.includes('not found'))
         ) {
             console.warn('⚠️ [chargePayment] Omise charge failed:', omiseError.message);
             console.log('🧪 [chargePayment] Using development fallback - simulating successful charge');

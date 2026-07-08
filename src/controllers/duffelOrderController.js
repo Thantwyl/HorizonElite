@@ -40,9 +40,21 @@ async (req, res) => {
         const errorDetails =
         error.response?.data;
 
+        const duffelRequestId =
+        error.duffelRequestId ||
+        errorDetails?.meta?.request_id;
+
+        const retryable =
+        Boolean(error.isRetryableDuffelError);
+
         return res.status(statusCode).json({
             error: error.message,
-            details: errorDetails
+            details: errorDetails,
+            retryable,
+            duffel_request_id: duffelRequestId,
+            message: retryable
+                ? "Payment succeeded, but Duffel could not create the ticket order after several retries. Ticketing is pending and can be retried without charging again."
+                : undefined
         });
 
     }

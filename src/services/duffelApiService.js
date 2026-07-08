@@ -9,6 +9,107 @@ const duffelHeaders = {
     "Content-Type": "application/json"
 };
 
+const sleep = (delayMs) =>
+    new Promise((resolve) => setTimeout(resolve, delayMs));
+
+const getDuffelStatusCode = (error) =>
+    error?.response?.status;
+
+const isRetryableDuffelError = (error) =>
+    [503, 504].includes(getDuffelStatusCode(error));
+
+const getDuffelRequestId = (error) =>
+    error?.response?.data?.meta?.request_id;
+
+const logDuffelError = (error) => {
+    console.error("========== DUFFEL API ERROR ==========");
+
+    console.error(
+        "Status:",
+        error.response?.status
+    );
+
+    console.error(
+        "Status Text:",
+        error.response?.statusText
+    );
+
+    console.error(
+        "Request ID:",
+        getDuffelRequestId(error)
+    );
+
+    console.error(
+        "Error Details:",
+        JSON.stringify(
+            error.response?.data,
+            null,
+            2
+        )
+    );
+
+    if (
+        error.response?.data?.errors
+    ) {
+
+        const messages =
+        error.response.data.errors
+        .map(item => item.message)
+        .filter(Boolean);
+
+        console.error(
+            "Duffel Validation Messages:",
+            messages
+        );
+
+    }
+
+    console.error("========== END ERROR ==========");
+};
+
+const requestWithDuffelRetry = async (
+    description,
+    requestFn,
+    retryDelaysMs = [2000, 5000, 10000]
+) => {
+    let attempt = 0;
+
+    while (attempt <= retryDelaysMs.length) {
+        attempt += 1;
+
+        try {
+            return await requestFn();
+        }
+        catch (error) {
+            logDuffelError(error);
+
+            if (
+                isRetryableDuffelError(error) &&
+                attempt <= retryDelaysMs.length
+            ) {
+                error.isRetryableDuffelError = true;
+
+                console.warn(
+                    `Duffel ${description} failed with ${getDuffelStatusCode(error)}. ` +
+                    `Retrying attempt ${attempt + 1} of ${retryDelaysMs.length + 1} ` +
+                    `after ${retryDelaysMs[attempt - 1]}ms.`
+                );
+
+                await sleep(retryDelaysMs[attempt - 1]);
+                continue;
+            }
+
+            error.isRetryableDuffelError =
+            isRetryableDuffelError(error);
+            error.duffelRequestId =
+            getDuffelRequestId(error);
+
+            throw error;
+        }
+
+    }
+};
+
 /*
 |--------------------------------------------------------------------------
 | Get Offer By ID
@@ -19,14 +120,17 @@ const getDuffelOfferById = async (
     offerId
 ) => {
 
-    const response = await axios.get(
+    const response = await requestWithDuffelRetry(
+        `offer lookup for ${offerId}`,
+        () => axios.get(
 
-        `https://api.duffel.com/air/offers/${offerId}`,
+            `https://api.duffel.com/air/offers/${offerId}`,
 
-        {
-            headers: duffelHeaders
-        }
+            {
+                headers: duffelHeaders
+            }
 
+        )
     );
 
     return response.data;
@@ -57,9 +161,9 @@ const createDuffelOrder = async (
 
     });
 
-    try {
-
-        const response = await axios.post(
+    const response = await requestWithDuffelRetry(
+        `order creation for ${offerId}`,
+        () => axios.post(
 
             "https://api.duffel.com/air/orders",
 
@@ -93,55 +197,10 @@ const createDuffelOrder = async (
 
             }
 
-        );
+        )
+    );
 
-        return response.data;
-
-    }
-    catch (error) {
-
-        console.error("========== DUFFEL API ERROR ==========");
-
-        console.error(
-            "Status:",
-            error.response?.status
-        );
-
-        console.error(
-            "Status Text:",
-            error.response?.statusText
-        );
-
-        console.error(
-            "Error Details:",
-            JSON.stringify(
-                error.response?.data,
-                null,
-                2
-            )
-        );
-
-        if (
-            error.response?.data?.errors
-        ) {
-
-            const messages =
-            error.response.data.errors
-            .map(item => item.message)
-            .filter(Boolean);
-
-            console.error(
-                "Duffel Validation Messages:",
-                messages
-            );
-
-        }
-
-        console.error("========== END ERROR ==========");
-
-        throw error;
-
-    }
+    return response.data;
 
 };
 
