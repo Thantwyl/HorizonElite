@@ -1,6 +1,11 @@
 const { save } = require("pdfkit");
 const pool = require("../config/db");
 
+const normalizeAddonStatus = (status) => {
+    const value = String(status || "").trim().toUpperCase();
+    return value || "PAID";
+};
+
 /**
  * Create Addon (Seat / Meal / Baggage / etc.)
  */
@@ -12,7 +17,9 @@ const createAddon = async ({
     addon_code,
     addon_detail,
     addon_price,
-    currency_code
+    currency_code,
+    quantity,
+    addon_status
 }) => {
 
     const client = await pool.connect();
@@ -32,9 +39,11 @@ const createAddon = async ({
                 addon_code,
                 addon_detail,
                 addon_price,
-                currency_code
+                currency_code,
+                quantity,
+                addon_status
             )
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
             RETURNING *;
             `,
             [
@@ -45,7 +54,9 @@ const createAddon = async ({
                 addon_code,
                 addon_detail,
                 addon_price,
-                currency_code
+                currency_code,
+                quantity || 1,
+                normalizeAddonStatus(addon_status)
             ]
         );
 
@@ -80,6 +91,58 @@ const getBookingAddons = async (booking_id) => {
         ORDER BY created_at DESC
         `,
         [booking_id]
+    );
+
+    return result.rows;
+};
+
+const getPaidBookingAddons = async (booking_id) => {
+
+    const result = await pool.query(
+        `
+        SELECT *
+        FROM passenger_addons
+        WHERE booking_id = $1
+        AND COALESCE(addon_status, 'PAID') = 'PAID'
+        ORDER BY created_at ASC
+        `,
+        [booking_id]
+    );
+
+    return result.rows;
+};
+
+const markPendingAddonsPaid = async ({
+    booking_id,
+    passenger_id,
+    addon_ids,
+    payment_id
+}) => {
+
+    if (!booking_id || !payment_id || !Array.isArray(addon_ids) || addon_ids.length === 0) {
+        return [];
+    }
+
+    const result = await pool.query(
+        `
+        UPDATE passenger_addons
+        SET
+            addon_status = 'PAID',
+            payment_id = $1,
+            paid_at = NOW(),
+            updated_at = NOW()
+        WHERE booking_id = $2
+        AND addon_id = ANY($3::uuid[])
+        AND ($4::uuid IS NULL OR passenger_id = $4)
+        AND COALESCE(addon_status, 'PAID') = 'PENDING_PAYMENT'
+        RETURNING *
+        `,
+        [
+            payment_id,
+            booking_id,
+            addon_ids,
+            passenger_id || null
+        ]
     );
 
     return result.rows;
@@ -169,14 +232,32 @@ const getBaggageOptions = async () => {
 |--------------------------------------------------------------------------
 */
 
+const normalizeBaggageCode = (code) => {
+
+    const value =
+        String(code || "")
+            .trim()
+            .toUpperCase();
+
+    if (/^BG\d+$/i.test(value)) {
+        return value.replace(/^BG/, "BAG");
+    }
+
+    return value;
+
+};
+
 const getBaggageOptionByCode = async (code) => {
 
     const baggageOptions =
         await getBaggageOptions();
 
+    const normalizedCode =
+        normalizeBaggageCode(code);
+
     return baggageOptions.find(
 
-        item => item.code === code
+        item => item.code === normalizedCode
 
     );
 
@@ -375,7 +456,10 @@ const savePassengerBaggage = async (
 module.exports = {
     createAddon,
     getBookingAddons,
+    getPaidBookingAddons,
     getBaggageOptions,
     getBaggageOptionByCode,
+    normalizeBaggageCode,
+    markPendingAddonsPaid,
     savePassengerBaggage
 };

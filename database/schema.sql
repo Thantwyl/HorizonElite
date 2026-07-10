@@ -22,7 +22,7 @@ CREATE TABLE users (
 
     last_name VARCHAR(60) NOT NULL,
 
-    phone_number VARCHAR(15),
+    phone_number VARCHAR(30),
 
     country_code VARCHAR(10),
 
@@ -421,7 +421,7 @@ CREATE TABLE passengers (
 
     pi_contact_email VARCHAR(50) NOT NULL,
 
-    pi_contact_phone VARCHAR(15) NOT NULL,
+    pi_contact_phone VARCHAR(30) NOT NULL,
 
     pi_passenger_status VARCHAR(20)
     DEFAULT 'ACTIVE',

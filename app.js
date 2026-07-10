@@ -1,8 +1,12 @@
+require("./src/config/loadEnv");
+
 const express = require("express");
 const cors = require("cors");
 const pool = require("./src/config/db");
 
-require("dotenv").config();
+const {
+    ensureRuntimeSchema
+} = require("./src/services/schemaMigrationService");
 
 console.log("APP.JS LOADED");
 console.log("Flight Result Routes Registered");
@@ -57,6 +61,9 @@ require("./src/routes/addonAvailabilityRoutes");
 
 const baggageRoutes = 
 require("./src/routes/addonRoutes")
+
+const flightStatusRoutes =
+require("./src/routes/flightStatusRoutes");
 
 const app = express();
 
@@ -161,6 +168,11 @@ app.use(
     addonRoutes
 );
 
+app.use(
+    "/api/flight-status",
+    flightStatusRoutes
+);
+
 
 /*
 |--------------------------------------------------------------------------
@@ -210,6 +222,8 @@ const startServer = async () => {
         console.log(
             result.rows[0]
         );
+
+        await ensureRuntimeSchema(pool);
 
         app.listen(
             process.env.PORT,

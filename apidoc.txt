@@ -68,6 +68,11 @@ Flight Search
 | --------              | ------ | -----------                                              | ------------- |
 | `/api/flights/search` | POST   | Search flights and save search record for logged in user | Yes |
 
+Flight Status
+| Endpoint             | Method | Description                                     | Auth Required |
+| --------             | ------ | -----------                                     | ------------- |
+| `/api/flight-status` | GET    | Check live flight status by flight number/date  | No            |
+
 Flight Results
 | Endpoint                              | Method | Description                                       | Auth Required |
 | --------                              | ------ | -----------                                       | ------------- |
@@ -182,7 +187,11 @@ GENERAL NOTES
 
     /api/payments/*
 
-5. Suggested testing phase for payment flow:
+5. Flight status lookup uses query parameters:
+
+    /api/flight-status?flight_number=MH750&departure_date=2026-08-15
+
+6. Suggested testing phase for payment flow:
 
     1. POST /api/payments/create with a real booking reference.
     2. GET /api/payments/test-omise to verify the gateway connection.
@@ -223,6 +232,9 @@ Authentication:
 
 Flight Search:
 - POST /api/flights/search
+
+Flight Status:
+- GET /api/flight-status
 
 Flight Results:
 - GET /api/results/:flight_search_id
@@ -610,6 +622,62 @@ Status: 401
 Status: 401
 {
     "message": "Invalid Token"
+}
+
+
+============================================================
+FLIGHT STATUS APIS
+============================================================
+
+1. Check Flight Status
+----------------------
+
+Method:
+GET
+
+Endpoint:
+/api/flight-status
+
+Auth Required:
+No
+
+Description:
+Checks the live status of a flight using the flight number and departure date.
+The backend sends the request to the external flight status provider and returns its response in the `data` field.
+
+Request URL Example:
+
+GET /api/flight-status?flight_number=MH750&departure_date=2026-08-15
+
+Required Query Parameters:
+- flight_number - the airline flight number, for example `MH750`
+- departure_date - the departure date in `YYYY-MM-DD` format, for example `2026-08-15`
+
+Headers:
+
+No custom headers are required for this request.
+If you want to keep requests consistent with other JSON APIs, you can leave `Content-Type: application/json` set, but it is not required for this GET request.
+
+Success Response:
+Status: 200
+
+{
+    "message": "Flight status retrieved successfully",
+    "data": {
+        "...": "provider response"
+    }
+}
+
+Error Responses:
+
+Status: 400
+{
+    "message": "flight_number and departure_date are required"
+}
+
+Status: 500
+{
+    "message": "Unable to retrieve flight status"
 }
 
 

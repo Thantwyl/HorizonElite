@@ -1,5 +1,6 @@
 const {
-    createDuffelOrderService
+    createDuffelOrderService,
+    validateBookingOfferService
 } = require(
     "../services/duffelOrderService"
 );
@@ -61,6 +62,52 @@ async (req, res) => {
 
 };
 
+const validateBookingOffer =
+async (req, res) => {
+
+    try {
+
+        const result =
+        await validateBookingOfferService(
+            req.body
+        );
+
+        return res.status(200).json({
+            message:
+            "Duffel offer is available",
+            data: result
+        });
+
+    }
+    catch(error) {
+
+        console.error(
+            "Duffel offer validation error:",
+            {
+                message: error.message,
+                status: error.statusCode || error.response?.status,
+                details: error.response?.data
+            }
+        );
+
+        const statusCode =
+        error.statusCode ||
+        error.response?.status ||
+        500;
+
+        return res.status(statusCode).json({
+            error: error.message,
+            details: error.response?.data,
+            duffel_request_id:
+            error.duffelRequestId ||
+            error.response?.data?.meta?.request_id
+        });
+
+    }
+
+};
+
 module.exports = {
-    createDuffelOrder
+    createDuffelOrder,
+    validateBookingOffer
 };

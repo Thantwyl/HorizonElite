@@ -149,6 +149,31 @@ const createDuffelOrder = async (
     amount,
     currency
 ) => {
+    console.log("========== DUFFEL FINAL PAYLOAD ==========");
+
+    console.log(
+    JSON.stringify(
+    {
+        data:{
+            type:"instant",
+            selected_offers:[
+                offerId
+            ],
+            passengers,
+            payments:[
+                {
+                    type:"balance",
+                    amount:amount.toString(),
+                    currency
+                }
+            ]
+        }
+    },
+    null,
+    2
+    ));
+
+    console.log("==========================================");
 
     console.log("========== Duffel Order Request ==========");
 
@@ -164,40 +189,33 @@ const createDuffelOrder = async (
     const response = await requestWithDuffelRetry(
         `order creation for ${offerId}`,
         () => axios.post(
+                "https://api.duffel.com/air/orders",
 
-            "https://api.duffel.com/air/orders",
-
-            {
-                data: {
-
-                    type: "instant",
-
-                    selected_offers: [
-                        offerId
+                {
+                data:{
+                    type:"instant",
+                    selected_offers:[
+                    offerId
                     ],
-
                     passengers,
-
-                    payments: [
-                        {
-                            type: "balance",
-
-                            amount: amount.toString(),
-
-                            currency: currency
-                        }
+                    payments:[
+                    {
+                        type:"balance",
+                        amount:amount.toString(),
+                        currency:currency
+                    }
                     ]
+                }
+                },
+
+                {
+                headers: duffelHeaders,
+
+                timeout:30000
 
                 }
-            },
 
-            {
-
-                headers: duffelHeaders
-
-            }
-
-        )
+                )
     );
 
     return response.data;

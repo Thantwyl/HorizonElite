@@ -1,6 +1,10 @@
 const ticketService =
 require("../services/ticketService");
 
+const {
+    sendTicketEmailNow
+} = require("../services/ticketEmailService");
+
 const downloadETicket =
 async (req, res) => {
 
@@ -36,6 +40,35 @@ async (req, res) => {
 
 };
 
+const sendETicketEmail =
+async (req, res) => {
+
+    try {
+
+        const result =
+        await sendTicketEmailNow(
+            req.params.bookingId
+        );
+
+        res.status(200).json({
+            message: "E-ticket sent to email",
+            data: result
+        });
+
+    }
+    catch(error) {
+
+        console.error(error);
+
+        res.status(500).json({
+            error: error.message
+        });
+
+    }
+
+};
+
 module.exports={
-    downloadETicket
+    downloadETicket,
+    sendETicketEmail
 };

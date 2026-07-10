@@ -1,6 +1,9 @@
 const pool =
 require("../config/db");
 
+const { getPaidBookingAddons } =
+require("./addonService");
+
 const generatePNR =
 require("../utils/generatePNR");
 
@@ -283,6 +286,7 @@ const getManageBooking = async (pnr, lastName) => {
             `
             SELECT
                 b.booking_id,
+                b.selected_flight_id,
                 b.pnr_reference,
                 b.booking_status,
                 b.ticketing_status,
@@ -342,6 +346,7 @@ const getManageBooking = async (pnr, lastName) => {
         // 🧠 GROUP DATA PROPERLY (IMPORTANT)
         const booking = {
             booking_id: result.rows[0].booking_id,
+            selected_flight_id: result.rows[0].selected_flight_id,
             pnr_reference: result.rows[0].pnr_reference,
             booking_status: result.rows[0].booking_status,
             ticketing_status: result.rows[0].ticketing_status,
@@ -391,11 +396,15 @@ const getManageBooking = async (pnr, lastName) => {
             }
         }
 
+        const addons =
+            await getPaidBookingAddons(booking.booking_id);
+
         return {
             booking,
             flight,
             passengers: Array.from(passengersMap.values()),
-            segments
+            segments,
+            addons
         };
 
     } finally {

@@ -5,6 +5,10 @@ const router = express.Router();
 const {
     register,
     login,
+    facebookLogin,
+    facebookCallback,
+    verifyEmail,
+    resendVerificationEmail,
     profile
 } = require("../controllers/authController");
 
@@ -23,10 +27,37 @@ router.post(
     register
 );
 
+// Verify Registration Email Link
+router.get(
+    "/verify-email",
+    verifyEmail
+);
+
+router.post(
+    "/verify-email",
+    verifyEmail
+);
+
+// Resend Registration Verification Email
+router.post(
+    "/resend-verification-email",
+    resendVerificationEmail
+);
+
 // Login User
 router.post(
     "/login",
     login
+);
+
+router.get(
+    "/facebook",
+    facebookLogin
+);
+
+router.get(
+    "/facebook/callback",
+    facebookCallback
 );
 
 // Get Logged In User Profile

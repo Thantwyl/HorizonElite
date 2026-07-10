@@ -4,8 +4,8 @@ require("express");
 const router =
 express.Router();
 
-const authenticateUser =
-require("../middlewares/authMiddleware");
+const optionalAuthMiddleware =
+require("../middlewares/optionalAuthMiddleware");
 
 const {
     createPayment,
@@ -38,19 +38,19 @@ router.get(
 
 router.post(
     "/create",
-    authenticateUser,
+    optionalAuthMiddleware,
     createPayment
 );
 
 router.post(
     "/charge",
-    authenticateUser,
+    optionalAuthMiddleware,
     chargePayment
 );
 
 router.post(
     "/simulate-success",
-    authenticateUser,
+    optionalAuthMiddleware,
     simulatePaymentSuccess
 );
 

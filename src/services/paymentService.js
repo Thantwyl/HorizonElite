@@ -185,7 +185,8 @@ const chargePayment = async (data) => {
         payment_id,
         token,
         amount,
-        currency
+        currency,
+        metadata
 
     } = data;
 
@@ -257,17 +258,18 @@ const chargePayment = async (data) => {
             [charge.id, payment_id]
         );
 
-        // Also update booking status to PAID_UNTICKETED
-        await pool.query(
-            `
-            UPDATE bookings
-            SET
-                booking_status = 'PAID_UNTICKETED',
-                booking_updated_at = NOW()
-            WHERE pnr_reference = $1
-            `,
-            [pnr_reference]
-        );
+        if (metadata?.payment_purpose !== "ADD_ONS") {
+            await pool.query(
+                `
+                UPDATE bookings
+                SET
+                    booking_status = 'PAID_UNTICKETED',
+                    booking_updated_at = NOW()
+                WHERE pnr_reference = $1
+                `,
+                [pnr_reference]
+            );
+        }
 
         const logPrefix = isDevFallback ? '🧪 [chargePayment DEV]' : '✅ [chargePayment]';
         console.log(logPrefix, 'Payment PAID - PNR:', pnr_reference, 'Reference ID:', charge.id);
@@ -290,32 +292,65 @@ const chargePayment = async (data) => {
 
 const simulatePaymentSuccess = async (payment_id) => {
 
-    const result = await pool.query(
-        `
-        UPDATE payments
-        SET
+    const client =
+        await pool.connect();
 
-            payment_status_code = 'PAID',
+    try {
 
-            gateway_transaction_reference =
-                'SIM_' || substr(md5(random()::text),1,12),
+        await client.query("BEGIN");
 
-            payment_timestamp = NOW()
+        const result = await client.query(
+            `
+            UPDATE payments
+            SET
 
-        WHERE payment_id = $1
+                payment_status_code = 'PAID',
 
-        RETURNING *
-        `,
-        [payment_id]
-    );
+                gateway_transaction_reference =
+                    'SIM_' || substr(md5(random()::text),1,12),
 
-    if(result.rows.length === 0){
+                payment_timestamp = NOW()
 
-        throw new Error("Payment not found");
+            WHERE payment_id = $1
+
+            RETURNING *
+            `,
+            [payment_id]
+        );
+
+        if(result.rows.length === 0){
+
+            throw new Error("Payment not found");
+
+        }
+
+        await client.query(
+            `
+            UPDATE bookings
+            SET
+                booking_status = 'PAID_UNTICKETED',
+                booking_updated_at = NOW()
+            WHERE pnr_reference = $1
+            `,
+            [result.rows[0].pnr_reference]
+        );
+
+        await client.query("COMMIT");
+
+        return result.rows[0];
 
     }
+    catch(error) {
 
-    return result.rows[0];
+        await client.query("ROLLBACK");
+        throw error;
+
+    }
+    finally {
+
+        client.release();
+
+    }
 
 };
 

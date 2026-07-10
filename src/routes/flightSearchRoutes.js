@@ -4,8 +4,8 @@ console.log("Flight Search Routes Loaded");
 
 const router = express.Router();
 
-const authenticateUser =
-require("../middlewares/authMiddleware");
+const optionalAuthMiddleware =
+require("../middlewares/optionalAuthMiddleware");
 
 const {
     createFlightSearch
@@ -13,7 +13,7 @@ const {
 
 router.post(
     "/search",
-    authenticateUser,
+    optionalAuthMiddleware,
     createFlightSearch
 );
 

@@ -35,7 +35,7 @@ const createFlightSearch = async (
         const flightSearchId =
             await flightSearchService
             .createFlightSearch(
-                req.user.email_address,
+                req.user?.email_address || null,
                 req.body
             );
 

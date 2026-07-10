@@ -3,9 +3,15 @@ const express = require("express");
 const router = express.Router();
 
 const {
-    createDuffelOrder
+    createDuffelOrder,
+    validateBookingOffer
 } = require(
     "../controllers/duffelOrderController"
+);
+
+router.post(
+    "/validate-offer",
+    validateBookingOffer
 );
 
 router.post(

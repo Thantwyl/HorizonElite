@@ -1,4 +1,6 @@
 const pool = require("../config/db");
+const axios = require("axios");
+const crypto = require("crypto");
 
 const {
     hashPassword
@@ -11,6 +13,89 @@ const {
 const {
     generateToken
 } = require("../services/tokenService");
+
+const {
+    normalizeEmail,
+    verifyEmailAddress
+} = require("../services/emailVerificationService");
+
+const {
+    issueVerificationToken,
+    verifyEmailToken
+} = require("../services/emailVerificationTokenService");
+
+const {
+    sendVerificationEmail
+} = require("../services/emailSenderService");
+
+const getVerificationUrl = (token) => {
+
+    const frontendUrl =
+        (process.env.FRONTEND_URL || "http://localhost:5173")
+            .replace(/\/$/, "");
+
+    return `${frontendUrl}/verify-email?token=${encodeURIComponent(token)}`;
+
+};
+
+const sendVerificationLink = async ({
+    emailAddress,
+    firstName
+}) => {
+
+    const token =
+        await issueVerificationToken(
+            pool,
+            emailAddress
+        );
+
+    await sendVerificationEmail({
+        to: emailAddress,
+        firstName,
+        verificationUrl:
+            getVerificationUrl(token)
+    });
+
+};
+
+const getBackendUrl = () =>
+    (process.env.BACKEND_PUBLIC_URL || `http://localhost:${process.env.PORT || 3000}`)
+        .replace(/\/$/, "");
+
+const getFrontendUrl = () =>
+    (process.env.FRONTEND_URL || "http://localhost:5173")
+        .replace(/\/$/, "");
+
+const getFacebookRedirectUri = () =>
+    `${getBackendUrl()}/api/auth/facebook/callback`;
+
+const encodeUserForRedirect = (user) =>
+    Buffer
+        .from(JSON.stringify(user))
+        .toString("base64url");
+
+const redirectSocialAuthError = (res, message) => {
+    const redirectUrl =
+        `${getFrontendUrl()}/social-auth-callback?error=${encodeURIComponent(message)}`;
+
+    return res.redirect(redirectUrl);
+};
+
+const getFacebookConfig = () => {
+    const appId = process.env.FACEBOOK_APP_ID;
+    const appSecret = process.env.FACEBOOK_APP_SECRET;
+
+    if (!appId || !appSecret) {
+        throw new Error(
+            "Facebook login is not configured. Please set FACEBOOK_APP_ID and FACEBOOK_APP_SECRET."
+        );
+    }
+
+    return {
+        appId,
+        appSecret
+    };
+};
 
 const register = async (req, res) => {
 
@@ -26,12 +111,15 @@ const register = async (req, res) => {
             confirm_password
         } = req.body;
 
+        const normalizedEmail =
+            normalizeEmail(email_address);
+
         if (
             !title ||
             !first_name ||
             !last_name ||
             !phone_number ||
-            !email_address ||
+            !normalizedEmail ||
             !password ||
             !confirm_password
         ) {
@@ -56,20 +144,63 @@ const register = async (req, res) => {
         const existingUser =
             await pool.query(
                 `
-                SELECT email_address
+                SELECT email_address, first_name, email_verified
                 FROM users
                 WHERE email_address = $1
                 `,
-                [email_address]
+                [normalizedEmail]
             );
 
         if (
             existingUser.rows.length > 0
         ) {
 
+            const user =
+                existingUser.rows[0];
+
+            if (
+                !user.email_verified
+            ) {
+
+                await sendVerificationLink({
+                    emailAddress: normalizedEmail,
+                    firstName: user.first_name
+                });
+
+                return res.status(200).json({
+                    message:
+                        "Account already exists but is not verified. A new verification email has been sent.",
+                    user: {
+                        email_address:
+                            user.email_address,
+                        email_verified:
+                            user.email_verified
+                    }
+                });
+
+            }
+
             return res.status(400).json({
                 message:
                 "Email already exists"
+            });
+
+        }
+
+        const emailVerification =
+            await verifyEmailAddress(normalizedEmail);
+
+        if (
+            !emailVerification.valid
+        ) {
+
+            return res.status(400).json({
+                message:
+                    emailVerification.message,
+                details: {
+                    reason:
+                        emailVerification.reason
+                }
             });
 
         }
@@ -101,10 +232,11 @@ const register = async (req, res) => {
                 RETURNING
                 email_address,
                 first_name,
-                last_name
+                last_name,
+                email_verified
                 `,
                 [
-                    email_address,
+                    emailVerification.normalizedEmail,
                     passwordHash,
                     title,
                     first_name,
@@ -113,10 +245,17 @@ const register = async (req, res) => {
                 ]
             );
 
+        await sendVerificationLink({
+            emailAddress:
+                emailVerification.normalizedEmail,
+            firstName:
+                first_name
+        });
+
         return res.status(201).json({
 
             message:
-            "User registered successfully",
+            "Registration successful. Please check your email and click the verification button.",
 
             user:
             result.rows[0]
@@ -145,8 +284,11 @@ const login = async (req, res) => {
             password
         } = req.body;
 
+        const normalizedEmail =
+            normalizeEmail(email_address);
+
         if (
-            !email_address ||
+            !normalizedEmail ||
             !password
         ) {
 
@@ -164,7 +306,7 @@ const login = async (req, res) => {
                 FROM users
                 WHERE email_address = $1
                 `,
-                [email_address]
+                [normalizedEmail]
             );
 
         if (
@@ -198,6 +340,17 @@ const login = async (req, res) => {
 
         }
 
+        if (
+            !user.email_verified
+        ) {
+
+            return res.status(403).json({
+                message:
+                    "Please verify your email before signing in"
+            });
+
+        }
+
         const token =
             generateToken(user);
 
@@ -221,6 +374,430 @@ const login = async (req, res) => {
 
             }
 
+        });
+
+    }
+    catch(error) {
+
+        console.error(error);
+
+        return res.status(500).json({
+            error:
+                error.message
+        });
+
+    }
+
+};
+
+const facebookLogin = async (req, res) => {
+
+    try {
+
+        const {
+            appId
+        } = getFacebookConfig();
+
+        const state =
+            crypto.randomBytes(16).toString("hex");
+
+        const params =
+            new URLSearchParams({
+                client_id: appId,
+                redirect_uri: getFacebookRedirectUri(),
+                state,
+                scope: "email,public_profile",
+                response_type: "code"
+            });
+
+        return res.redirect(
+            `https://www.facebook.com/v20.0/dialog/oauth?${params.toString()}`
+        );
+
+    }
+    catch(error) {
+
+        console.error(error);
+        return redirectSocialAuthError(res, error.message);
+
+    }
+
+};
+
+const facebookCallback = async (req, res) => {
+
+    try {
+
+        const {
+            code,
+            error,
+            error_description
+        } = req.query;
+
+        if (error) {
+            return redirectSocialAuthError(
+                res,
+                String(error_description || error)
+            );
+        }
+
+        if (!code) {
+            return redirectSocialAuthError(
+                res,
+                "Facebook did not return an authorization code."
+            );
+        }
+
+        const {
+            appId,
+            appSecret
+        } = getFacebookConfig();
+
+        const tokenResponse =
+            await axios.get(
+                "https://graph.facebook.com/v20.0/oauth/access_token",
+                {
+                    params: {
+                        client_id: appId,
+                        client_secret: appSecret,
+                        redirect_uri: getFacebookRedirectUri(),
+                        code
+                    }
+                }
+            );
+
+        const accessToken =
+            tokenResponse.data?.access_token;
+
+        if (!accessToken) {
+            return redirectSocialAuthError(
+                res,
+                "Facebook did not return an access token."
+            );
+        }
+
+        const profileResponse =
+            await axios.get(
+                "https://graph.facebook.com/me",
+                {
+                    params: {
+                        fields: "id,first_name,last_name,email",
+                        access_token: accessToken
+                    }
+                }
+            );
+
+        const facebookProfile =
+            profileResponse.data || {};
+
+        const facebookId =
+            facebookProfile.id;
+
+        const normalizedEmail =
+            normalizeEmail(facebookProfile.email);
+
+        if (!facebookId || !normalizedEmail) {
+            return redirectSocialAuthError(
+                res,
+                "Facebook account did not provide an email address. Please use email sign up."
+            );
+        }
+
+        const firstName =
+            facebookProfile.first_name || "Facebook";
+
+        const lastName =
+            facebookProfile.last_name || "User";
+
+        const existingUserResult =
+            await pool.query(
+                `
+                SELECT *
+                FROM users
+                WHERE email_address = $1
+                OR facebook_id = $2
+                LIMIT 1
+                `,
+                [
+                    normalizedEmail,
+                    facebookId
+                ]
+            );
+
+        let user;
+
+        if (existingUserResult.rows.length > 0) {
+
+            const updateResult =
+                await pool.query(
+                    `
+                    UPDATE users
+                    SET
+                        facebook_id = COALESCE(facebook_id, $1),
+                        auth_provider = CASE
+                            WHEN auth_provider = 'LOCAL' THEN 'FACEBOOK'
+                            ELSE auth_provider
+                        END,
+                        email_verified = TRUE,
+                        account_status = 'ACTIVE',
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE email_address = $2
+                    OR facebook_id = $1
+                    RETURNING *
+                    `,
+                    [
+                        facebookId,
+                        normalizedEmail
+                    ]
+                );
+
+            user =
+                updateResult.rows[0];
+
+        }
+        else {
+
+            const randomPasswordHash =
+                await hashPassword(
+                    crypto.randomBytes(32).toString("hex")
+                );
+
+            const insertResult =
+                await pool.query(
+                    `
+                    INSERT INTO users
+                    (
+                        email_address,
+                        password_hash,
+                        first_name,
+                        last_name,
+                        email_verified,
+                        account_status,
+                        auth_provider,
+                        facebook_id
+                    )
+                    VALUES
+                    (
+                        $1,
+                        $2,
+                        $3,
+                        $4,
+                        TRUE,
+                        'ACTIVE',
+                        'FACEBOOK',
+                        $5
+                    )
+                    RETURNING *
+                    `,
+                    [
+                        normalizedEmail,
+                        randomPasswordHash,
+                        firstName,
+                        lastName,
+                        facebookId
+                    ]
+                );
+
+            user =
+                insertResult.rows[0];
+
+        }
+
+        const token =
+            generateToken(user);
+
+        const redirectUser = {
+            email_address: user.email_address,
+            first_name: user.first_name,
+            last_name: user.last_name,
+            auth_provider: user.auth_provider
+        };
+
+        const redirectUrl =
+            `${getFrontendUrl()}/social-auth-callback` +
+            `?token=${encodeURIComponent(token)}` +
+            `&user=${encodeURIComponent(encodeUserForRedirect(redirectUser))}`;
+
+        return res.redirect(redirectUrl);
+
+    }
+    catch(error) {
+
+        console.error(error);
+        return redirectSocialAuthError(
+            res,
+            error.message || "Facebook login failed"
+        );
+
+    }
+
+};
+
+const verifyEmail = async (req, res) => {
+
+    try {
+
+        const token =
+            req.query.token ||
+            req.body?.token;
+
+        if (
+            !token
+        ) {
+
+            return res.status(400).json({
+                message:
+                    "Verification token is required"
+            });
+
+        }
+
+        const tokenResult =
+            await verifyEmailToken(
+                pool,
+                token
+            );
+
+        if (!tokenResult.valid) {
+
+            return res.status(tokenResult.statusCode || 400).json({
+                message:
+                    tokenResult.message
+            });
+
+        }
+
+        const normalizedEmail =
+            normalizeEmail(tokenResult.emailAddress);
+
+        const userResult =
+            await pool.query(
+                `
+                SELECT email_address, email_verified
+                FROM users
+                WHERE email_address = $1
+                `,
+                [normalizedEmail]
+            );
+
+        if (
+            userResult.rows.length === 0
+        ) {
+
+            return res.status(404).json({
+                message:
+                    "User was not found"
+            });
+
+        }
+
+        if (
+            userResult.rows[0].email_verified
+        ) {
+
+            return res.status(200).json({
+                message:
+                    "Email is already verified"
+            });
+
+        }
+
+        await pool.query(
+            `
+            UPDATE users
+            SET
+                email_verified = TRUE,
+                account_status = 'ACTIVE',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE email_address = $1
+            `,
+            [normalizedEmail]
+        );
+
+        return res.status(200).json({
+            message:
+                "Email verified successfully. You can now sign in."
+        });
+
+    }
+    catch(error) {
+
+        console.error(error);
+
+        return res.status(500).json({
+            error:
+                error.message
+        });
+
+    }
+
+};
+
+const resendVerificationEmail = async (req, res) => {
+
+    try {
+
+        const {
+            email_address
+        } = req.body;
+
+        const normalizedEmail =
+            normalizeEmail(email_address);
+
+        if (
+            !normalizedEmail
+        ) {
+
+            return res.status(400).json({
+                message:
+                    "Email is required"
+            });
+
+        }
+
+        const userResult =
+            await pool.query(
+                `
+                SELECT email_address, first_name, email_verified
+                FROM users
+                WHERE email_address = $1
+                `,
+                [normalizedEmail]
+            );
+
+        if (
+            userResult.rows.length === 0
+        ) {
+
+            return res.status(404).json({
+                message:
+                    "User was not found"
+            });
+
+        }
+
+        const user =
+            userResult.rows[0];
+
+        if (
+            user.email_verified
+        ) {
+
+            return res.status(400).json({
+                message:
+                    "Email is already verified"
+            });
+
+        }
+
+        await sendVerificationLink({
+            emailAddress: normalizedEmail,
+            firstName: user.first_name
+        });
+
+        return res.status(200).json({
+            message:
+                "A new verification email has been sent"
         });
 
     }
@@ -277,6 +854,10 @@ const profile = async (
 
 module.exports = {
     register,
-    login, 
+    login,
+    facebookLogin,
+    facebookCallback,
+    verifyEmail,
+    resendVerificationEmail,
     profile
 };

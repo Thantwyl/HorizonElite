@@ -2,6 +2,7 @@ const {
     createAddon,
     getBookingAddons,
     getBaggageOptions,
+    markPendingAddonsPaid,
     savePassengerBaggage
 } = require("../services/addonService");
 
@@ -50,6 +51,46 @@ const getAddons = async (req, res) => {
 
         res.status(500).json({
             message: "Failed to fetch addons"
+        });
+
+    }
+};
+
+const markAddonsPaid = async (req, res) => {
+
+    try {
+
+        const {
+            booking_id,
+            passenger_id,
+            addon_ids,
+            payment_id
+        } = req.body;
+
+        if (!booking_id || !payment_id || !Array.isArray(addon_ids) || addon_ids.length === 0) {
+            return res.status(400).json({
+                message: "booking_id, payment_id and addon_ids are required."
+            });
+        }
+
+        const addons = await markPendingAddonsPaid({
+            booking_id,
+            passenger_id,
+            addon_ids,
+            payment_id
+        });
+
+        res.status(200).json({
+            message: "Add-ons marked as paid",
+            data: addons
+        });
+
+    } catch (error) {
+
+        console.error(error);
+
+        res.status(500).json({
+            message: "Failed to mark add-ons as paid"
         });
 
     }
@@ -179,7 +220,7 @@ const selectPassengerBaggage = async (
 
         console.error(error);
 
-        return res.status(500).json({
+        return res.status(400).json({
 
             message:
 
@@ -195,5 +236,6 @@ module.exports = {
     addAddon,
     getAddons,
     fetchBaggageOptions,
+    markAddonsPaid,
     selectPassengerBaggage
 };

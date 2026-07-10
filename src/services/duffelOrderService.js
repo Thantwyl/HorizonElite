@@ -112,15 +112,11 @@ async ({
         return;
     }
 
-    const isSimulatedPayment =
-    (payment.gateway_transaction_reference || "")
-    .startsWith("SIM_");
-
     await pool.query(
         `
         UPDATE bookings
         SET
-            booking_status = 'CANCELLED',
+            booking_status = 'PAID_UNTICKETED',
             ticketing_status = 'FAILED',
             booking_updated_at = NOW()
         WHERE booking_id = $1
@@ -128,17 +124,120 @@ async ({
         [bookingId]
     );
 
-    if (isSimulatedPayment) {
-        await pool.query(
-            `
-            UPDATE payments
-            SET
-                payment_status_code = 'VOIDED',
-                updated_at = NOW()
-            WHERE payment_id = $1
-            `,
-            [payment.payment_id]
+};
+
+const getBookingOfferId =
+async (booking_id) => {
+
+    const result =
+    await pool.query(
+        `
+        SELECT
+            sf.selected_flight_id,
+            sf.flight_result_id,
+            sf.flight_offer_id AS selected_offer_id,
+            fr.flight_offer_id AS result_offer_id
+        FROM bookings b
+        JOIN selected_flights sf
+            ON sf.selected_flight_id = b.selected_flight_id
+        LEFT JOIN flight_results fr
+            ON fr.flight_result_id = sf.flight_result_id
+        WHERE b.booking_id = $1
+        LIMIT 1
+        `,
+        [booking_id]
+    );
+
+    if (result.rows.length === 0) {
+        const error =
+        new Error("Booking offer not found");
+        error.statusCode = 404;
+        throw error;
+    }
+
+    const row =
+    result.rows[0];
+
+    const offerId =
+    isValidDuffelOfferId(row.selected_offer_id)
+        ? row.selected_offer_id
+        : row.result_offer_id;
+
+    if (!isValidDuffelOfferId(offerId)) {
+        const error =
+        new Error(
+            `Invalid Duffel offer ID: ${offerId}. ` +
+            "Run a new flight search and select a fresh result."
         );
+        error.statusCode = 400;
+        throw error;
+    }
+
+    return {
+        offerId,
+        selectedFlightId: row.selected_flight_id,
+        selectedFlightResultId: row.flight_result_id
+    };
+};
+
+const validateBookingOfferService =
+async ({
+    booking_id
+}) => {
+
+    if (!booking_id) {
+        const error =
+        new Error("booking_id is required");
+        error.statusCode = 400;
+        throw error;
+    }
+
+    const {
+        offerId,
+        selectedFlightId,
+        selectedFlightResultId
+    } =
+    await getBookingOfferId(booking_id);
+
+    try {
+        const offer =
+        await getDuffelOfferById(offerId);
+
+        return {
+            available: true,
+            offer_id: offerId,
+            offer
+        };
+    }
+    catch (duffelError) {
+        if (isOfferUnavailableError(duffelError)) {
+            await pool.query(
+                `
+                UPDATE selected_flights
+                SET
+                    selection_status = 'EXPIRED',
+                    date_modified = NOW()
+                WHERE selected_flight_id = $1
+                `,
+                [selectedFlightId]
+            );
+
+            if (selectedFlightResultId) {
+                await pool.query(
+                    `
+                    UPDATE flight_results
+                    SET
+                        flight_result_status = 'EXPIRED'
+                    WHERE flight_result_id = $1
+                    `,
+                    [selectedFlightResultId]
+                );
+            }
+
+            throw buildOfferUnavailableError();
+        }
+
+        throw duffelError;
     }
 
 };
@@ -649,6 +748,25 @@ async ({
         ]
         );
 
+        const ticketNumber =
+            `HE${Date.now().toString().slice(-8)}${Math.floor(Math.random() * 9000 + 1000)}`;
+
+        await client.query(
+            `
+            UPDATE bookings
+            SET
+                booking_status = 'TICKETED',
+                ticketing_status = 'TICKETED',
+                ticket_number = COALESCE(ticket_number, $1),
+                booking_updated_at = NOW()
+            WHERE booking_id = $2
+            `,
+            [
+                ticketNumber,
+                booking_id
+            ]
+        );
+
         await client.query(
             "COMMIT"
         );
@@ -736,5 +854,6 @@ async ({
 };
 
 module.exports = {
-    createDuffelOrderService
+    createDuffelOrderService,
+    validateBookingOfferService
 };
