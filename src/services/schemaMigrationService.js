@@ -41,6 +41,15 @@ const ensureRuntimeSchema = async (pool) => {
     `);
 
     await pool.query(`
+        CREATE TABLE IF NOT EXISTS booking_checkins (
+            checkin_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            booking_id UUID NOT NULL UNIQUE REFERENCES bookings(booking_id) ON DELETE CASCADE,
+            checked_in_at TIMESTAMP NOT NULL DEFAULT LOCALTIMESTAMP,
+            created_at TIMESTAMP NOT NULL DEFAULT LOCALTIMESTAMP
+        )
+    `);
+
+    await pool.query(`
         ALTER TABLE IF EXISTS passenger_addons
         ADD COLUMN IF NOT EXISTS addon_status VARCHAR(20) NOT NULL DEFAULT 'PAID'
     `);

@@ -46,6 +46,8 @@ require("./src/routes/manageBookingRoutes");
 
 const ticketRoutes =
 require("./src/routes/ticketRoutes");
+const boardingPassRoutes = require("./src/routes/boardingPassRoutes");
+const checkInRoutes = require("./src/routes/checkInRoutes");
 
 const addonRoutes = 
 require("./src/routes/addonRoutes");
@@ -142,6 +144,8 @@ app.use(
     "/api/tickets",
     ticketRoutes
 );
+app.use("/api/boarding-passes", boardingPassRoutes);
+app.use("/api/check-in", checkInRoutes);
 
 app.use(
     "/api/addons", 
