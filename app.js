@@ -17,6 +17,9 @@ require("./src/routes/translationRoutes");
 const authRoutes =
 require("./src/routes/authRoutes");
 
+const profileRoutes =
+require("./src/routes/profileRoutes");
+
 const flightSearchRoutes =
 require("./src/routes/flightSearchRoutes");
 
@@ -93,6 +96,11 @@ app.use(
 app.use(
     "/api/auth",
     authRoutes
+);
+
+app.use(
+    "/api/profile",
+    profileRoutes
 );
 
 app.use(
