@@ -7,6 +7,8 @@ const {
     login,
     facebookLogin,
     facebookCallback,
+    googleLogin,
+    googleCallback,
     verifyEmail,
     resendVerificationEmail,
     profile
@@ -58,6 +60,16 @@ router.get(
 router.get(
     "/facebook/callback",
     facebookCallback
+);
+
+router.get(
+    "/google",
+    googleLogin
+);
+
+router.get(
+    "/google/callback",
+    googleCallback
 );
 
 // Get Logged In User Profile

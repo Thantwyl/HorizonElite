@@ -69,6 +69,56 @@ const getFrontendUrl = () =>
 const getFacebookRedirectUri = () =>
     `${getBackendUrl()}/api/auth/facebook/callback`;
 
+const getGoogleRedirectUri = () =>
+    `${getBackendUrl()}/api/auth/google/callback`;
+
+const getGoogleConfig = () => {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
+    if (!clientId || !clientSecret) {
+        throw new Error(
+            "Google login is not configured. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET."
+        );
+    }
+
+    return { clientId, clientSecret };
+};
+
+const googleStateCookieName = "google_oauth_state";
+
+const getCookie = (req, name) => {
+    const cookies = String(req.headers.cookie || "").split(";");
+
+    for (const cookie of cookies) {
+        const separatorIndex = cookie.indexOf("=");
+        if (separatorIndex < 0) continue;
+
+        const key = cookie.slice(0, separatorIndex).trim();
+        if (key === name) {
+            return decodeURIComponent(cookie.slice(separatorIndex + 1).trim());
+        }
+    }
+
+    return undefined;
+};
+
+const setGoogleStateCookie = (res, state) => {
+    const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+    res.setHeader(
+        "Set-Cookie",
+        `${googleStateCookieName}=${encodeURIComponent(state)}; HttpOnly; Path=/api/auth/google; SameSite=Lax; Max-Age=600${secure}`
+    );
+};
+
+const clearGoogleStateCookie = (res) => {
+    const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+    res.setHeader(
+        "Set-Cookie",
+        `${googleStateCookieName}=; HttpOnly; Path=/api/auth/google; SameSite=Lax; Max-Age=0${secure}`
+    );
+};
+
 const encodeUserForRedirect = (user) =>
     Buffer
         .from(JSON.stringify(user))
@@ -633,6 +683,177 @@ const facebookCallback = async (req, res) => {
 
 };
 
+const googleLogin = async (req, res) => {
+    try {
+        const { clientId } = getGoogleConfig();
+        const state = crypto.randomBytes(32).toString("base64url");
+
+        setGoogleStateCookie(res, state);
+
+        const params = new URLSearchParams({
+            client_id: clientId,
+            redirect_uri: getGoogleRedirectUri(),
+            response_type: "code",
+            scope: "openid email profile",
+            state,
+            prompt: "select_account"
+        });
+
+        return res.redirect(
+            `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
+        );
+    }
+    catch(error) {
+        console.error(error);
+        return redirectSocialAuthError(res, error.message);
+    }
+};
+
+const googleCallback = async (req, res) => {
+    try {
+        const { code, state, error, error_description } = req.query;
+        const expectedState = getCookie(req, googleStateCookieName);
+        clearGoogleStateCookie(res);
+
+        if (error) {
+            return redirectSocialAuthError(res, String(error_description || error));
+        }
+
+        if (!state || !expectedState || state !== expectedState) {
+            return redirectSocialAuthError(
+                res,
+                "Google login could not be verified. Please try again."
+            );
+        }
+
+        if (!code) {
+            return redirectSocialAuthError(
+                res,
+                "Google did not return an authorization code."
+            );
+        }
+
+        const { clientId, clientSecret } = getGoogleConfig();
+        const tokenResponse = await axios.post(
+            "https://oauth2.googleapis.com/token",
+            new URLSearchParams({
+                code: String(code),
+                client_id: clientId,
+                client_secret: clientSecret,
+                redirect_uri: getGoogleRedirectUri(),
+                grant_type: "authorization_code"
+            }),
+            { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+        );
+
+        const accessToken = tokenResponse.data?.access_token;
+        if (!accessToken) {
+            return redirectSocialAuthError(res, "Google did not return an access token.");
+        }
+
+        const profileResponse = await axios.get(
+            "https://openidconnect.googleapis.com/v1/userinfo",
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        const googleProfile = profileResponse.data || {};
+        const googleId = googleProfile.sub;
+        const normalizedEmail = normalizeEmail(googleProfile.email);
+
+        if (!googleId || !normalizedEmail || googleProfile.email_verified !== true) {
+            return redirectSocialAuthError(
+                res,
+                "Google did not provide a verified email address. Please use email sign up."
+            );
+        }
+
+        const existingUserResult = await pool.query(
+            `SELECT * FROM users WHERE email_address = $1 OR google_id = $2`,
+            [normalizedEmail, googleId]
+        );
+
+        let user;
+        if (existingUserResult.rows.length > 0) {
+            const userByEmail = existingUserResult.rows.find(
+                (candidate) => candidate.email_address === normalizedEmail
+            );
+            const userByGoogleId = existingUserResult.rows.find(
+                (candidate) => candidate.google_id === googleId
+            );
+
+            if (
+                userByEmail &&
+                userByGoogleId &&
+                userByEmail.email_address !== userByGoogleId.email_address
+            ) {
+                return redirectSocialAuthError(
+                    res,
+                    "This Google account conflicts with an existing account. Please contact support."
+                );
+            }
+
+            const matchedUser = userByGoogleId || userByEmail;
+            const updateResult = await pool.query(
+                `
+                UPDATE users
+                SET google_id = COALESCE(google_id, $1),
+                    auth_provider = CASE WHEN auth_provider = 'LOCAL' THEN 'GOOGLE' ELSE auth_provider END,
+                    email_verified = TRUE,
+                    account_status = 'ACTIVE',
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE email_address = $2
+                  AND (google_id IS NULL OR google_id = $1)
+                RETURNING *
+                `,
+                [googleId, matchedUser.email_address]
+            );
+            user = updateResult.rows[0];
+        }
+        else {
+            const randomPasswordHash = await hashPassword(
+                crypto.randomBytes(32).toString("hex")
+            );
+            const insertResult = await pool.query(
+                `
+                INSERT INTO users
+                    (email_address, password_hash, first_name, last_name,
+                     email_verified, account_status, auth_provider, google_id)
+                VALUES ($1, $2, $3, $4, TRUE, 'ACTIVE', 'GOOGLE', $5)
+                RETURNING *
+                `,
+                [
+                    normalizedEmail,
+                    randomPasswordHash,
+                    googleProfile.given_name || "Google",
+                    googleProfile.family_name || "User",
+                    googleId
+                ]
+            );
+            user = insertResult.rows[0];
+        }
+
+        const token = generateToken(user);
+        const redirectUser = {
+            email_address: user.email_address,
+            first_name: user.first_name,
+            last_name: user.last_name,
+            auth_provider: user.auth_provider
+        };
+        const redirectUrl =
+            `${getFrontendUrl()}/social-auth-callback` +
+            `?token=${encodeURIComponent(token)}` +
+            `&user=${encodeURIComponent(encodeUserForRedirect(redirectUser))}`;
+
+        return res.redirect(redirectUrl);
+    }
+    catch(error) {
+        console.error(error.response?.data || error);
+        return redirectSocialAuthError(
+            res,
+            error.response?.data?.error_description || error.message || "Google login failed"
+        );
+    }
+};
+
 const verifyEmail = async (req, res) => {
 
     try {
@@ -857,6 +1078,8 @@ module.exports = {
     login,
     facebookLogin,
     facebookCallback,
+    googleLogin,
+    googleCallback,
     verifyEmail,
     resendVerificationEmail,
     profile

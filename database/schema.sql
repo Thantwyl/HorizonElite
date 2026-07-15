@@ -36,6 +36,12 @@ CREATE TABLE users (
 
     email_verified BOOLEAN NOT NULL DEFAULT FALSE,
 
+    auth_provider VARCHAR(30) NOT NULL DEFAULT 'LOCAL',
+
+    facebook_id VARCHAR(100),
+
+    google_id VARCHAR(255) UNIQUE,
+
     marketing_consent BOOLEAN NOT NULL DEFAULT FALSE,
 
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
