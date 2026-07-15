@@ -72,6 +72,9 @@ const getFacebookRedirectUri = () =>
 const getGoogleRedirectUri = () =>
     `${getBackendUrl()}/api/auth/google/callback`;
 
+const getLineRedirectUri = () =>
+    `${getBackendUrl()}/api/auth/line/callback`;
+
 const getGoogleConfig = () => {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -83,6 +86,19 @@ const getGoogleConfig = () => {
     }
 
     return { clientId, clientSecret };
+};
+
+const getLineConfig = () => {
+    const channelId = process.env.LINE_CHANNEL_ID;
+    const channelSecret = process.env.LINE_CHANNEL_SECRET;
+
+    if (!channelId || !channelSecret) {
+        throw new Error(
+            "LINE login is not configured. Please set LINE_CHANNEL_ID and LINE_CHANNEL_SECRET."
+        );
+    }
+
+    return { channelId, channelSecret };
 };
 
 const googleStateCookieName = "google_oauth_state";
@@ -117,6 +133,37 @@ const clearGoogleStateCookie = (res) => {
         "Set-Cookie",
         `${googleStateCookieName}=; HttpOnly; Path=/api/auth/google; SameSite=Lax; Max-Age=0${secure}`
     );
+};
+
+const lineOAuthCookieName = "line_oauth_session";
+
+const setLineOAuthCookie = (res, session) => {
+    const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+    const value = Buffer.from(JSON.stringify(session)).toString("base64url");
+    res.setHeader(
+        "Set-Cookie",
+        `${lineOAuthCookieName}=${value}; HttpOnly; Path=/api/auth/line; SameSite=Lax; Max-Age=600${secure}`
+    );
+};
+
+const clearLineOAuthCookie = (res) => {
+    const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+    res.setHeader(
+        "Set-Cookie",
+        `${lineOAuthCookieName}=; HttpOnly; Path=/api/auth/line; SameSite=Lax; Max-Age=0${secure}`
+    );
+};
+
+const getLineOAuthSession = (req) => {
+    try {
+        const value = getCookie(req, lineOAuthCookieName);
+        return value
+            ? JSON.parse(Buffer.from(value, "base64url").toString("utf8"))
+            : undefined;
+    }
+    catch {
+        return undefined;
+    }
 };
 
 const encodeUserForRedirect = (user) =>
@@ -854,6 +901,177 @@ const googleCallback = async (req, res) => {
     }
 };
 
+const lineLogin = async (req, res) => {
+    try {
+        const { channelId } = getLineConfig();
+        const state = crypto.randomBytes(32).toString("base64url");
+        const nonce = crypto.randomBytes(32).toString("base64url");
+
+        setLineOAuthCookie(res, { state, nonce });
+
+        const params = new URLSearchParams({
+            response_type: "code",
+            client_id: channelId,
+            redirect_uri: getLineRedirectUri(),
+            state,
+            scope: "openid profile",
+            nonce
+        });
+
+        return res.redirect(
+            `https://access.line.me/oauth2/v2.1/authorize?${params.toString()}`
+        );
+    }
+    catch(error) {
+        console.error(error);
+        return redirectSocialAuthError(res, error.message);
+    }
+};
+
+const lineCallback = async (req, res) => {
+    try {
+        const { code, state, error, error_description } = req.query;
+        const session = getLineOAuthSession(req);
+        clearLineOAuthCookie(res);
+
+        if (error) {
+            return redirectSocialAuthError(res, String(error_description || error));
+        }
+
+        if (!state || !session?.state || state !== session.state) {
+            return redirectSocialAuthError(
+                res,
+                "LINE login could not be verified. Please try again."
+            );
+        }
+
+        if (!code) {
+            return redirectSocialAuthError(res, "LINE did not return an authorization code.");
+        }
+
+        const { channelId, channelSecret } = getLineConfig();
+        const tokenResponse = await axios.post(
+            "https://api.line.me/oauth2/v2.1/token",
+            new URLSearchParams({
+                grant_type: "authorization_code",
+                code: String(code),
+                redirect_uri: getLineRedirectUri(),
+                client_id: channelId,
+                client_secret: channelSecret
+            }),
+            { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+        );
+
+        const idToken = tokenResponse.data?.id_token;
+        if (!idToken) {
+            return redirectSocialAuthError(res, "LINE did not return an identity token.");
+        }
+
+        const verificationResponse = await axios.post(
+            "https://api.line.me/oauth2/v2.1/verify",
+            new URLSearchParams({
+                id_token: idToken,
+                client_id: channelId,
+                nonce: session.nonce
+            }),
+            { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+        );
+
+        const lineProfile = verificationResponse.data || {};
+        const lineId = lineProfile.sub;
+        if (!lineId) {
+            return redirectSocialAuthError(res, "LINE did not provide a valid user ID.");
+        }
+
+        const verifiedEmail = normalizeEmail(lineProfile.email);
+        const internalEmail =
+            `line-${crypto.createHash("sha256").update(lineId).digest("hex").slice(0, 24)}@social.local`;
+        const accountEmail = verifiedEmail || internalEmail;
+        const nameParts = String(lineProfile.name || "LINE User").trim().split(/\s+/);
+        const firstName = nameParts.shift() || "LINE";
+        const lastName = nameParts.join(" ") || "User";
+
+        const existingUserResult = await pool.query(
+            `SELECT * FROM users WHERE email_address = $1 OR line_id = $2`,
+            [accountEmail, lineId]
+        );
+
+        let user;
+        if (existingUserResult.rows.length > 0) {
+            const userByEmail = existingUserResult.rows.find(
+                (candidate) => candidate.email_address === accountEmail
+            );
+            const userByLineId = existingUserResult.rows.find(
+                (candidate) => candidate.line_id === lineId
+            );
+
+            if (
+                userByEmail && userByLineId &&
+                userByEmail.email_address !== userByLineId.email_address
+            ) {
+                return redirectSocialAuthError(
+                    res,
+                    "This LINE account conflicts with an existing account. Please contact support."
+                );
+            }
+
+            const matchedUser = userByLineId || userByEmail;
+            const updateResult = await pool.query(
+                `
+                UPDATE users
+                SET line_id = COALESCE(line_id, $1),
+                    auth_provider = CASE WHEN auth_provider = 'LOCAL' THEN 'LINE' ELSE auth_provider END,
+                    email_verified = TRUE,
+                    account_status = 'ACTIVE',
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE email_address = $2
+                  AND (line_id IS NULL OR line_id = $1)
+                RETURNING *
+                `,
+                [lineId, matchedUser.email_address]
+            );
+            user = updateResult.rows[0];
+        }
+        else {
+            const randomPasswordHash = await hashPassword(
+                crypto.randomBytes(32).toString("hex")
+            );
+            const insertResult = await pool.query(
+                `
+                INSERT INTO users
+                    (email_address, password_hash, first_name, last_name,
+                     email_verified, account_status, auth_provider, line_id)
+                VALUES ($1, $2, $3, $4, TRUE, 'ACTIVE', 'LINE', $5)
+                RETURNING *
+                `,
+                [accountEmail, randomPasswordHash, firstName, lastName, lineId]
+            );
+            user = insertResult.rows[0];
+        }
+
+        const token = generateToken(user);
+        const redirectUser = {
+            email_address: user.email_address,
+            first_name: user.first_name,
+            last_name: user.last_name,
+            auth_provider: user.auth_provider
+        };
+        const redirectUrl =
+            `${getFrontendUrl()}/social-auth-callback` +
+            `?token=${encodeURIComponent(token)}` +
+            `&user=${encodeURIComponent(encodeUserForRedirect(redirectUser))}`;
+
+        return res.redirect(redirectUrl);
+    }
+    catch(error) {
+        console.error(error.response?.data || error);
+        return redirectSocialAuthError(
+            res,
+            error.response?.data?.error_description || error.message || "LINE login failed"
+        );
+    }
+};
+
 const verifyEmail = async (req, res) => {
 
     try {
@@ -1080,6 +1298,8 @@ module.exports = {
     facebookCallback,
     googleLogin,
     googleCallback,
+    lineLogin,
+    lineCallback,
     verifyEmail,
     resendVerificationEmail,
     profile

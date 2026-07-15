@@ -28,6 +28,17 @@ const ensureRuntimeSchema = async (pool) => {
 
     await pool.query(`
         ALTER TABLE IF EXISTS users
+        ADD COLUMN IF NOT EXISTS line_id VARCHAR(255)
+    `);
+
+    await pool.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_users_line_id
+        ON users(line_id)
+        WHERE line_id IS NOT NULL
+    `);
+
+    await pool.query(`
+        ALTER TABLE IF EXISTS users
         ADD COLUMN IF NOT EXISTS title VARCHAR(10)
     `);
 

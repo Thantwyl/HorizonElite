@@ -42,6 +42,8 @@ CREATE TABLE users (
 
     google_id VARCHAR(255) UNIQUE,
 
+    line_id VARCHAR(255) UNIQUE,
+
     marketing_consent BOOLEAN NOT NULL DEFAULT FALSE,
 
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
