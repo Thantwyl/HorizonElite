@@ -51,6 +51,7 @@ const ticketRoutes =
 require("./src/routes/ticketRoutes");
 const boardingPassRoutes = require("./src/routes/boardingPassRoutes");
 const checkInRoutes = require("./src/routes/checkInRoutes");
+const whatsappRoutes = require("./src/routes/whatsappRoutes");
 
 const addonRoutes = 
 require("./src/routes/addonRoutes");
@@ -154,6 +155,7 @@ app.use(
 );
 app.use("/api/boarding-passes", boardingPassRoutes);
 app.use("/api/check-in", checkInRoutes);
+app.use("/api/whatsapp", whatsappRoutes);
 
 app.use(
     "/api/addons", 
