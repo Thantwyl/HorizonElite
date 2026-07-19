@@ -124,8 +124,93 @@ const sendBoardingPassEmail = async ({ to, pnr, pdfBuffer }) => {
     return { message_id: delivery.messageId, accepted };
 };
 
+const escapeHtml = (value) =>
+    String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+
+const sendCheckInReminderEmail = async ({
+    to,
+    passengerName,
+    passengerLastName,
+    pnr,
+    airlineName,
+    flightNumber,
+    origin,
+    destination,
+    departure,
+    checkInUrl
+}) => {
+    const transporter = getTransporter();
+    const departureText = new Intl.DateTimeFormat("en-US", {
+        dateStyle: "full",
+        timeStyle: "short",
+        timeZone: process.env.CHECK_IN_REMINDER_TIME_ZONE || "Asia/Yangon"
+    }).format(new Date(departure));
+    const safe = {
+        passengerName: escapeHtml(passengerName || "traveler"),
+        passengerLastName: escapeHtml(passengerLastName),
+        pnr: escapeHtml(pnr),
+        airlineName: escapeHtml(airlineName),
+        flightNumber: escapeHtml(flightNumber),
+        origin: escapeHtml(origin),
+        destination: escapeHtml(destination),
+        departureText: escapeHtml(departureText),
+        checkInUrl: escapeHtml(checkInUrl)
+    };
+
+    const delivery = await transporter.sendMail({
+        from: process.env.SMTP_FROM || process.env.SMTP_USER,
+        to,
+        subject: `Check-in reminder for ${pnr}: ${origin} to ${destination}`,
+        text:
+            `Hello ${passengerName || "traveler"},\n\n` +
+            "Your flight departs in 4 days.\n\n" +
+            `Booking reference: ${pnr}\n` +
+            `Passenger last name: ${passengerLastName}\n` +
+            `Flight: ${airlineName || ""} ${flightNumber}\n` +
+            `Route: ${origin} to ${destination}\n` +
+            `Departure: ${departureText}\n\n` +
+            "Online check-in opens 48 hours before departure and closes 90 minutes before take-off. " +
+            "Have your passport or travel ID and booking reference ready. After checking in, download your boarding pass and review the airline's baggage and airport requirements.\n\n" +
+            `Check in: ${checkInUrl}\n\n` +
+            "Please verify the latest check-in time with the operating airline, as airline rules can vary.",
+        html:
+            `<p>Hello ${safe.passengerName},</p>` +
+            "<p><strong>Your flight departs in 4 days.</strong> Here is your check-in guide.</p>" +
+            "<table style=\"border-collapse:collapse\">" +
+            `<tr><td style=\"padding:4px 16px 4px 0\"><strong>Booking reference</strong></td><td>${safe.pnr}</td></tr>` +
+            `<tr><td style=\"padding:4px 16px 4px 0\"><strong>Passenger last name</strong></td><td>${safe.passengerLastName}</td></tr>` +
+            `<tr><td style=\"padding:4px 16px 4px 0\"><strong>Flight</strong></td><td>${safe.airlineName} ${safe.flightNumber}</td></tr>` +
+            `<tr><td style=\"padding:4px 16px 4px 0\"><strong>Route</strong></td><td>${safe.origin} to ${safe.destination}</td></tr>` +
+            `<tr><td style=\"padding:4px 16px 4px 0\"><strong>Departure</strong></td><td>${safe.departureText}</td></tr>` +
+            "</table>" +
+            "<h3>Before you check in</h3>" +
+            "<ul><li>Online check-in opens 48 hours before departure and closes 90 minutes before take-off.</li>" +
+            "<li>Have your passport or travel ID and booking reference ready.</li>" +
+            "<li>Confirm passenger details, seats, baggage, and required travel documents.</li>" +
+            "<li>After check-in, download your boarding pass and keep it available at the airport.</li></ul>" +
+            `<p><a href=\"${safe.checkInUrl}\" style=\"display:inline-block;background:#063b70;color:#fff;padding:12px 20px;text-decoration:none;font-weight:700;border-radius:4px\">Go to online check-in</a></p>` +
+            "<p>Please verify the latest check-in time with the operating airline, as airline rules can vary.</p>"
+    });
+
+    const normalizedRecipient = String(to).trim().toLowerCase();
+    const accepted = (delivery.accepted || []).map(address =>
+        String(address).trim().toLowerCase()
+    );
+    if (!accepted.includes(normalizedRecipient)) {
+        throw new Error("The email provider did not accept the reminder recipient");
+    }
+
+    return { message_id: delivery.messageId, accepted };
+};
+
 module.exports = {
     sendVerificationEmail,
     sendTicketEmail,
-    sendBoardingPassEmail
+    sendBoardingPassEmail,
+    sendCheckInReminderEmail
 };

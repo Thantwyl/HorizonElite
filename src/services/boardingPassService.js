@@ -5,7 +5,8 @@ const getBoardingPass = async (bookingId) => {
     const result = await pool.query(`
         SELECT b.booking_id, b.pnr_reference, b.booking_status, b.ticketing_status,
             b.user_email_address,
-            sf.flight_number, sf.origin_airport_code, sf.destination_airport_code,
+            sf.airline_name, sf.flight_number, sf.origin_airport_code, sf.destination_airport_code,
+            sf.cabin_class,
             sf.departure_datetime, p.pi_title, p.pi_first_name, p.pi_last_name,
             p.pi_contact_email,
             EXISTS (
@@ -34,7 +35,9 @@ const generateBoardingPass = async (bookingId) => {
         passenger_name: [booking.pi_title, booking.pi_first_name, booking.pi_last_name].filter(Boolean).join(" "),
         pnr: booking.pnr_reference, flight_number: booking.flight_number,
         origin: booking.origin_airport_code, destination: booking.destination_airport_code,
-        departure: booking.departure_datetime
+        departure: booking.departure_datetime,
+        airline: booking.airline_name,
+        cabin: booking.cabin_class
     });
 };
 

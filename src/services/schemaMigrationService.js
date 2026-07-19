@@ -97,6 +97,26 @@ const ensureRuntimeSchema = async (pool) => {
     `);
 
     await pool.query(`
+        CREATE TABLE IF NOT EXISTS check_in_reminder_jobs (
+            job_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            booking_id UUID NOT NULL UNIQUE REFERENCES bookings(booking_id) ON DELETE CASCADE,
+            recipient_email VARCHAR(100) NOT NULL,
+            status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+            attempts INTEGER NOT NULL DEFAULT 0,
+            due_at TIMESTAMP NOT NULL,
+            sent_at TIMESTAMP,
+            last_error TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT LOCALTIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT LOCALTIMESTAMP
+        )
+    `);
+
+    await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_check_in_reminder_jobs_due
+        ON check_in_reminder_jobs(status, due_at)
+    `);
+
+    await pool.query(`
         ALTER TABLE IF EXISTS passenger_addons
         ADD COLUMN IF NOT EXISTS addon_status VARCHAR(20) NOT NULL DEFAULT 'PAID'
     `);

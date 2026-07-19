@@ -7,6 +7,9 @@ const pool = require("./src/config/db");
 const {
     ensureRuntimeSchema
 } = require("./src/services/schemaMigrationService");
+const {
+    startCheckInReminderWorker
+} = require("./src/services/checkInReminderService");
 
 console.log("APP.JS LOADED");
 console.log("Flight Result Routes Registered");
@@ -238,6 +241,8 @@ const startServer = async () => {
         );
 
         await ensureRuntimeSchema(pool);
+
+        startCheckInReminderWorker();
 
         app.listen(
             process.env.PORT,
