@@ -34,6 +34,12 @@ const selectSeat = async (req, res) => {
             seat_id
         } = req.body;
 
+        if (!order_id || !passenger_id || !seat_id) {
+            return res.status(400).json({
+                message: "order_id, passenger_id, and seat_id are required"
+            });
+        }
+
         const data = await seatService.selectSeat(
             order_id,
             passenger_id,

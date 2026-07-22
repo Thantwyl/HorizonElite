@@ -487,6 +487,60 @@ const login = async (req, res) => {
 
 };
 
+const refresh = async (req, res) => {
+
+    try {
+
+        const userResult =
+            await pool.query(
+                `
+                SELECT
+                    email_address,
+                    first_name,
+                    last_name
+                FROM users
+                WHERE email_address = $1
+                `,
+                [req.user.email_address]
+            );
+
+        if (userResult.rows.length === 0) {
+            return res.status(404).json({
+                message: "User was not found"
+            });
+        }
+
+        const user = userResult.rows[0];
+        const token = generateToken(user);
+
+        return res.status(200).json({
+            message: "Token refreshed",
+            token,
+            user
+        });
+
+    }
+    catch(error) {
+
+        console.error(error);
+
+        return res.status(500).json({
+            error: error.message
+        });
+
+    }
+
+};
+
+const logout = async (req, res) => {
+
+    return res.status(200).json({
+        success: true,
+        message: "Logout successful"
+    });
+
+};
+
 const facebookLogin = async (req, res) => {
 
     try {
@@ -1302,5 +1356,7 @@ module.exports = {
     lineCallback,
     verifyEmail,
     resendVerificationEmail,
+    refresh,
+    logout,
     profile
 };

@@ -13,6 +13,8 @@ const {
     lineCallback,
     verifyEmail,
     resendVerificationEmail,
+    refresh,
+    logout,
     profile
 } = require("../controllers/authController");
 
@@ -52,6 +54,17 @@ router.post(
 router.post(
     "/login",
     login
+);
+
+router.post(
+    "/refresh",
+    authenticateUser,
+    refresh
+);
+
+router.post(
+    "/logout",
+    logout
 );
 
 router.get(

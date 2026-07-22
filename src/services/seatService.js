@@ -40,7 +40,29 @@ const getSeatMap = async (orderId) => {
     return response.data;
 };
 
+const selectSeat = async (orderId, passengerId, seatId) => {
+
+    const response = await axios.post(
+        `https://api.duffel.com/air/orders/${orderId}/actions/update`,
+        {
+            data: {
+                services: [
+                    {
+                        type: "seat",
+                        passenger_id: passengerId,
+                        seat_id: seatId
+                    }
+                ]
+            }
+        },
+        { headers }
+    );
+
+    return response.data;
+};
+
 module.exports = {
     createOrder,
-    getSeatMap
+    getSeatMap,
+    selectSeat
 };
