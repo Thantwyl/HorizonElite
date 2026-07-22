@@ -7,6 +7,12 @@ const getSeatMap = async (req, res) => {
 
         const { offer_id } = req.params;
 
+        if (!offer_id || !offer_id.startsWith("ord_")) {
+            return res.status(400).json({
+                message: "A Duffel order ID starting with ord_ is required for seat maps"
+            });
+        }
+
         const data = await seatService.getSeatMap(offer_id);
 
         res.json({

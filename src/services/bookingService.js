@@ -303,6 +303,9 @@ const getManageBooking = async (pnr, lastName) => {
                 sf.departure_datetime,
                 sf.arrival_datetime,
 
+                do_latest.duffel_order_id,
+                do_latest.duffel_response,
+
                 p.passenger_id,
                 p.pi_first_name,
                 p.pi_last_name,
@@ -333,6 +336,16 @@ const getManageBooking = async (pnr, lastName) => {
             LEFT JOIN result_segments rs
                 ON rs.flight_result_id = sf.flight_result_id
 
+            LEFT JOIN LATERAL (
+                SELECT
+                    duffel_order_id,
+                    duffel_response
+                FROM duffel_orders
+                WHERE booking_id = b.booking_id
+                ORDER BY updated_at DESC NULLS LAST
+                LIMIT 1
+            ) do_latest ON TRUE
+
             WHERE b.pnr_reference = $1
             AND LOWER(p.pi_last_name) = LOWER($2)
             `,
@@ -357,13 +370,26 @@ const getManageBooking = async (pnr, lastName) => {
             is_guest: result.rows[0].is_guest
         };
 
+        let duffelResponse = result.rows[0].duffel_response;
+
+        if (typeof duffelResponse === "string") {
+            try {
+                duffelResponse = JSON.parse(duffelResponse || "{}");
+            }
+            catch {
+                duffelResponse = {};
+            }
+        }
+
         const flight = {
             airline_name: result.rows[0].airline_name,
             flight_number: result.rows[0].flight_number,
             origin: result.rows[0].origin_airport_code,
             destination: result.rows[0].destination_airport_code,
             departure: result.rows[0].departure_datetime,
-            arrival: result.rows[0].arrival_datetime
+            arrival: result.rows[0].arrival_datetime,
+            duffel_order_id: duffelResponse?.data?.id || null,
+            local_duffel_order_id: result.rows[0].duffel_order_id || null
         };
 
         const passengersMap = new Map();

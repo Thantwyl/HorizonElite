@@ -6,7 +6,28 @@ API Version: 1.0.0
 Default Base URL: http://localhost:3000
 Swagger UI: http://localhost:3000/api-docs
 
-Last updated: 2026-07-04
+Last updated: 2026-07-22
+
+
+RECENT IMPLEMENTATION NOTES
+---------------------------
+
+The following route groups are implemented in the codebase and should be used by
+the current TypeScript frontend:
+
+- Auth refresh/logout: POST /api/auth/refresh, POST /api/auth/logout
+- Profile management: /api/profile/*
+- Booking actions: GET /api/bookings/manage/:pnr/:lastName/actions
+- E-ticket email: POST /api/tickets/:bookingId/email
+- Boarding pass download/email: GET /api/boarding-passes/:bookingId,
+  POST /api/boarding-passes/:bookingId/email
+- Check-in lookup/confirm/reminders: /api/check-in/*
+- WhatsApp config/webhook/reminder: /api/whatsapp/*
+- Seat maps/selection: GET /api/seats/map/:order_id,
+  POST /api/seats/select
+
+Seat maps require a Duffel order ID that starts with ord_. A Duffel offer ID
+that starts with off_ is not valid for /api/seats/map/:order_id.
 
 
 INSTALLATION
@@ -62,11 +83,29 @@ Authentication
 | `/api/auth/register` | POST   | Register a new user account     | No |
 | `/api/auth/login`    | POST   | Login user and return JWT token | No |
 | `/api/auth/profile`  | GET    | Get logged in user's profile    | Yes |
+| `/api/auth/refresh`  | POST   | Refresh the current JWT token   | Yes |
+| `/api/auth/logout`   | POST   | End frontend session            | No |
 
 Flight Search
 | Endpoint              | Method | Description                                              | Auth Required |
 | --------              | ------ | -----------                                              | ------------- |
 | `/api/flights/search` | POST   | Search flights and save search record for logged in user | Yes |
+
+Profile
+| Endpoint | Method | Description | Auth Required |
+| -------- | ------ | ----------- | ------------- |
+| `/api/profile` | GET | Get profile summary, saved passengers, emergency contacts, and saved payment methods | Yes |
+| `/api/profile` | PUT | Update logged-in user's profile | Yes |
+| `/api/profile/passengers` | GET | List saved passenger profiles | Yes |
+| `/api/profile/passengers` | POST | Create saved passenger profile | Yes |
+| `/api/profile/passengers/:passengerId` | PUT | Update saved passenger profile | Yes |
+| `/api/profile/passengers/:passengerId` | DELETE | Delete saved passenger profile | Yes |
+| `/api/profile/emergency-contacts` | POST | Create emergency contact | Yes |
+| `/api/profile/emergency-contacts/:contactId` | PUT | Update emergency contact | Yes |
+| `/api/profile/emergency-contacts/:contactId` | DELETE | Delete emergency contact | Yes |
+| `/api/profile/payment-methods` | POST | Create saved payment method | Yes |
+| `/api/profile/payment-methods/:paymentMethodId` | PUT | Update saved payment method | Yes |
+| `/api/profile/payment-methods/:paymentMethodId` | DELETE | Delete saved payment method | Yes |
 
 Flight Status
 | Endpoint             | Method | Description                                     | Auth Required |
@@ -94,6 +133,8 @@ Bookings
 | Endpoint        | Method | Description                                               | Auth Required |
 | --------        | ------ | -----------                                               | ------------- |
 | `/api/bookings` | POST   | Create booking with flight and passengers (generates PNR) | No |
+| `/api/bookings/manage/:pnr/:lastName` | GET | Retrieve booking by PNR and passenger last name | No |
+| `/api/bookings/manage/:pnr/:lastName/actions` | GET | Retrieve allowed self-service actions | No |
 
 Payments
 | Endpoint                  | Method | Description                                    | Auth Required |
@@ -107,7 +148,36 @@ Payments
 Duffel Orders
 | Endpoint                    | Method | Description                                          | Auth Required |
 | --------                    | ------ | -----------                                          | ------------- |
+| `/api/duffel/orders/validate-offer` | POST | Validate selected Duffel offer before payment/order | No |
 | `/api/duffel/orders/create` | POST   | Create Duffel order using paid booking and payment   | No |
+
+Boarding Passes
+| Endpoint | Method | Description | Auth Required |
+| -------- | ------ | ----------- | ------------- |
+| `/api/boarding-passes/:bookingId` | GET | Download generated boarding pass PDF | No |
+| `/api/boarding-passes/:bookingId/email` | POST | Email generated boarding pass PDF | No |
+
+Check-in
+| Endpoint | Method | Description | Auth Required |
+| -------- | ------ | ----------- | ------------- |
+| `/api/check-in/lookup` | POST | Find booking and check online check-in eligibility | No |
+| `/api/check-in/confirm` | POST | Confirm online check-in for a booking/passenger | No |
+| `/api/check-in/reminders/email` | POST | Schedule check-in reminder email | No |
+| `/api/check-in/reminders/whatsapp` | POST | Schedule check-in reminder WhatsApp message | No |
+
+WhatsApp
+| Endpoint | Method | Description | Auth Required |
+| -------- | ------ | ----------- | ------------- |
+| `/api/whatsapp/config-status` | GET | Check WhatsApp/Meta configuration status | No |
+| `/api/whatsapp/webhook` | GET | Verify Meta webhook | No |
+| `/api/whatsapp/webhook` | POST | Receive Meta webhook event | No |
+| `/api/whatsapp/check-in-reminder` | POST | Send check-in reminder through WhatsApp | No |
+
+Seats
+| Endpoint | Method | Description | Auth Required |
+| -------- | ------ | ----------- | ------------- |
+| `/api/seats/map/:order_id` | GET | Fetch Duffel seat map for an existing order ID | No |
+| `/api/seats/select` | POST | Select a seat for an order passenger | No |
 
 Translations
 | Endpoint                                 | Method | Description                                | Auth Required |
@@ -274,7 +344,7 @@ Meals:
 - GET /api/meals
 
 Seats:
-- GET /api/seats/map/:offer_id
+- GET /api/seats/map/:order_id
 - POST /api/seats/select
 
 Translations:
@@ -981,16 +1051,18 @@ Method:
 GET
 
 Endpoint:
-/api/seats/map/:offer_id
+/api/seats/map/:order_id
 
 Auth Required:
 No
 
 Description:
-Returns the seat map for a flight offer.
+Returns the seat map for an existing Duffel order. The order_id must be a
+Duffel order ID that starts with ord_; offer IDs that start with off_ are not
+valid for this endpoint.
 
 Example Request:
-GET /api/seats/map/off_0000000000000000
+GET /api/seats/map/ord_0000000000000000
 
 2. Select Seat
 --------------
@@ -1014,8 +1086,8 @@ Saves the selected seat for a passenger.
 Raw Request Body:
 
 {
-    "order_id": "uuid-order-value",
-    "passenger_id": "uuid-passenger-value",
+    "order_id": "ord_0000000000000000",
+    "passenger_id": "pas_0000000000000000",
     "seat_id": "seat-12A"
 }
 
