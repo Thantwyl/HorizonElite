@@ -183,6 +183,39 @@ const createFlightSearch = async (
 
 };
 
+const getPopularRoutes = async (
+    req,
+    res
+) => {
+
+    try {
+
+        const routes =
+            await flightSearchService
+            .getPopularRoutes(req.query.limit);
+
+        return res.status(200).json({
+            message:
+                "Popular routes retrieved successfully",
+            data:
+                routes
+        });
+
+    }
+    catch(error) {
+
+        console.error(error);
+
+        return res.status(500).json({
+            error:
+                error.message
+        });
+
+    }
+
+};
+
 module.exports = {
-    createFlightSearch
+    createFlightSearch,
+    getPopularRoutes
 };

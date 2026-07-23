@@ -425,8 +425,30 @@ const getManageBooking = async (pnr, lastName) => {
         const addons =
             await getPaidBookingAddons(booking.booking_id);
 
+        const originalPaymentAmount =
+            Number(booking.total_payment_amount || 0);
+
+        const paidAddonsTotal =
+            addons.reduce((total, addon) => {
+                const price =
+                    Number(addon.addon_price || 0);
+
+                const quantity =
+                    Number(addon.quantity || 1);
+
+                return total + (price * quantity);
+            }, 0);
+
         return {
-            booking,
+            booking: {
+                ...booking,
+                original_payment_amount:
+                    originalPaymentAmount,
+                paid_addons_total:
+                    paidAddonsTotal,
+                total_paid_amount:
+                    originalPaymentAmount + paidAddonsTotal
+            },
             flight,
             passengers: Array.from(passengersMap.values()),
             segments,

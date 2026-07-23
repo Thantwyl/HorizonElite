@@ -8,8 +8,14 @@ const optionalAuthMiddleware =
 require("../middlewares/optionalAuthMiddleware");
 
 const {
-    createFlightSearch
+    createFlightSearch,
+    getPopularRoutes
 } = require("../controllers/flightSearchController");
+
+router.get(
+    "/popular-routes",
+    getPopularRoutes
+);
 
 router.post(
     "/search",

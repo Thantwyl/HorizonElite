@@ -115,6 +115,36 @@ const createFlightSearch = async (
 
 };
 
+const getPopularRoutes = async (limit = 6) => {
+    const normalizedLimit =
+        Math.min(Math.max(Number(limit) || 6, 1), 12);
+
+    const result = await pool.query(
+        `
+        SELECT
+            TRIM(origin_airport_code) AS origin_airport_code,
+            TRIM(destination_airport_code) AS destination_airport_code,
+            COUNT(*)::int AS search_count,
+            MAX(fs.flight_search_timestamp) AS last_searched_at
+        FROM flight_search_segments fss
+        INNER JOIN flight_searches fs
+            ON fs.flight_search_id = fss.flight_search_id
+        WHERE fss.segment_number = 1
+        GROUP BY
+            TRIM(origin_airport_code),
+            TRIM(destination_airport_code)
+        ORDER BY
+            search_count DESC,
+            last_searched_at DESC
+        LIMIT $1
+        `,
+        [normalizedLimit]
+    );
+
+    return result.rows;
+};
+
 module.exports = {
-    createFlightSearch
+    createFlightSearch,
+    getPopularRoutes
 };
