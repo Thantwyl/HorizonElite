@@ -39,6 +39,7 @@ const createPayment = async (data) => {
 
         booking_id,
         pnr_reference,
+        user_email_address,
         actor_email_address,
         payment_method,
         currency_code,
@@ -96,9 +97,20 @@ const createPayment = async (data) => {
     const resolvedUserEmail =
     booking.user_email_address;
 
+    const requestMatchesBookingOwner =
+        user_email_address &&
+        String(user_email_address).toLowerCase() ===
+        String(resolvedUserEmail).toLowerCase();
+
+    const actorMatchesBookingOwner =
+        actor_email_address &&
+        String(actor_email_address).toLowerCase() ===
+        String(resolvedUserEmail).toLowerCase();
+
     if (
         actor_email_address &&
-        actor_email_address !== resolvedUserEmail
+        !actorMatchesBookingOwner &&
+        !requestMatchesBookingOwner
     ) {
         const error = new Error(
             "You are not allowed to pay for this booking"

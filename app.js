@@ -73,6 +73,8 @@ require("./src/routes/addonRoutes")
 
 const flightStatusRoutes =
 require("./src/routes/flightStatusRoutes");
+const currencyRoutes =
+require("./src/routes/currencyRoutes");
 
 const app = express();
 
@@ -188,6 +190,11 @@ app.use(
 app.use(
     "/api/flight-status",
     flightStatusRoutes
+);
+
+app.use(
+    "/api/currency",
+    currencyRoutes
 );
 
 
