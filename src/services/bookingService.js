@@ -460,8 +460,41 @@ const getManageBooking = async (pnr, lastName) => {
     }
 };
 
+const getBookingSummaryByPnr = async (pnr) => {
+    const result = await pool.query(
+        `
+        SELECT
+            b.booking_id,
+            b.pnr_reference,
+            b.booking_status,
+            b.ticketing_status,
+            b.user_email_address,
+            sf.origin_airport_code,
+            sf.destination_airport_code,
+            sf.departure_datetime,
+            sf.arrival_datetime
+        FROM bookings b
+        INNER JOIN selected_flights sf
+            ON sf.selected_flight_id = b.selected_flight_id
+        WHERE UPPER(b.pnr_reference) = UPPER($1)
+        ORDER BY b.booking_created_at DESC NULLS LAST
+        LIMIT 1
+        `,
+        [pnr]
+    );
+
+    if (result.rows.length === 0) {
+        const error = new Error("Booking not found");
+        error.statusCode = 404;
+        throw error;
+    }
+
+    return result.rows[0];
+};
+
 
 module.exports = {
     createBooking,
-    getManageBooking
+    getManageBooking,
+    getBookingSummaryByPnr
 };

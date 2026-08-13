@@ -1,5 +1,9 @@
 require("./src/config/loadEnv");
 
+if (process.env.ENABLE_DEBUG_LOGS !== "true") {
+    console.log = () => undefined;
+}
+
 const express = require("express");
 const cors = require("cors");
 const pool = require("./src/config/db");
@@ -10,6 +14,9 @@ const {
 const {
     startCheckInReminderWorker
 } = require("./src/services/checkInReminderService");
+const {
+    startPersonalizedReminderWorker
+} = require("./src/services/personalizedReminderService");
 
 console.log("APP.JS LOADED");
 console.log("Flight Result Routes Registered");
@@ -55,6 +62,7 @@ require("./src/routes/ticketRoutes");
 const boardingPassRoutes = require("./src/routes/boardingPassRoutes");
 const checkInRoutes = require("./src/routes/checkInRoutes");
 const whatsappRoutes = require("./src/routes/whatsappRoutes");
+const personalizedReminderRoutes = require("./src/routes/personalizedReminderRoutes");
 
 const addonRoutes = 
 require("./src/routes/addonRoutes");
@@ -161,6 +169,7 @@ app.use(
 app.use("/api/boarding-passes", boardingPassRoutes);
 app.use("/api/check-in", checkInRoutes);
 app.use("/api/whatsapp", whatsappRoutes);
+app.use("/api/personalized", personalizedReminderRoutes);
 
 app.use(
     "/api/addons", 
@@ -250,6 +259,7 @@ const startServer = async () => {
         await ensureRuntimeSchema(pool);
 
         startCheckInReminderWorker();
+        startPersonalizedReminderWorker();
 
         app.listen(
             process.env.PORT,

@@ -3,16 +3,16 @@ const {
     scheduleCheckInWhatsAppReminder
 } = require("../services/checkInReminderService");
 
-const isValidBookingId = (bookingId) =>
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(bookingId);
+const getBookingIdentifier = (body) =>
+    String(body.booking_id || body.pnr_reference || "").trim();
 
 const scheduleEmail = async (req, res) => {
     try {
-        const bookingId = String(req.body.booking_id || "").trim();
-        if (!isValidBookingId(bookingId)) {
-            return res.status(400).json({ error: "A valid booking_id is required" });
+        const bookingIdentifier = getBookingIdentifier(req.body);
+        if (!bookingIdentifier) {
+            return res.status(400).json({ error: "booking_id or pnr_reference is required" });
         }
-        const job = await scheduleCheckInReminder(bookingId);
+        const job = await scheduleCheckInReminder(bookingIdentifier);
         return res.status(201).json({
             message: job.status === "SENT"
                 ? "The check-in reminder email was already sent"
@@ -33,11 +33,11 @@ const scheduleEmail = async (req, res) => {
 
 const scheduleWhatsApp = async (req, res) => {
     try {
-        const bookingId = String(req.body.booking_id || "").trim();
-        if (!isValidBookingId(bookingId)) {
-            return res.status(400).json({ error: "A valid booking_id is required" });
+        const bookingIdentifier = getBookingIdentifier(req.body);
+        if (!bookingIdentifier) {
+            return res.status(400).json({ error: "booking_id or pnr_reference is required" });
         }
-        const job = await scheduleCheckInWhatsAppReminder(bookingId);
+        const job = await scheduleCheckInWhatsAppReminder(bookingIdentifier);
         return res.status(201).json({
             message: job.status === "SENT"
                 ? "The check-in WhatsApp reminder was already sent"

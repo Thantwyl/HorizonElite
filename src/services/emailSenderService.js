@@ -208,9 +208,164 @@ const sendCheckInReminderEmail = async ({
     return { message_id: delivery.messageId, accepted };
 };
 
+const sendArrivalCardReminderEmail = async ({
+    to,
+    passengerName,
+    pnr,
+    airlineName,
+    flightNumber,
+    origin,
+    destination,
+    arrival,
+    requirement
+}) => {
+    const transporter = getTransporter();
+    const arrivalText = new Intl.DateTimeFormat("en-US", {
+        dateStyle: "full",
+        timeStyle: "short",
+        timeZone: process.env.ARRIVAL_CARD_REMINDER_TIME_ZONE || "Asia/Yangon"
+    }).format(new Date(arrival));
+    const formItems = Array.isArray(requirement?.forms) ? requirement.forms : [];
+    const safe = {
+        passengerName: escapeHtml(passengerName || "traveler"),
+        pnr: escapeHtml(pnr),
+        airlineName: escapeHtml(airlineName),
+        flightNumber: escapeHtml(flightNumber),
+        origin: escapeHtml(origin),
+        destination: escapeHtml(destination),
+        arrivalText: escapeHtml(arrivalText),
+        headline: escapeHtml(requirement?.headline || "Check whether your destination requires an arrival card or digital immigration form before you travel.")
+    };
+    const formText = formItems.length > 0
+        ? formItems.map((form, index) =>
+            `${index + 1}. ${form.title}${form.url ? ` - ${form.url}` : ""}${form.description ? `\n   ${form.description}` : ""}`
+        ).join("\n")
+        : "No destination-specific arrival card form was returned by the travel requirements provider. Please verify requirements with the destination government or operating airline.";
+    const formHtml = formItems.length > 0
+        ? `<ul>${formItems.map(form => {
+            const title = escapeHtml(form.title || "Arrival form");
+            const description = form.description ? `<br><span>${escapeHtml(form.description)}</span>` : "";
+            const url = form.url ? `<br><a href="${escapeHtml(form.url)}">${escapeHtml(form.url)}</a>` : "";
+            return `<li><strong>${title}</strong>${description}${url}</li>`;
+        }).join("")}</ul>`
+        : "<p>No destination-specific arrival card form was returned by the travel requirements provider. Please verify requirements with the destination government or operating airline.</p>";
+
+    const delivery = await transporter.sendMail({
+        from: process.env.SMTP_FROM || process.env.SMTP_USER,
+        to,
+        subject: `Arrival card reminder for ${pnr}: ${destination}`,
+        text:
+            `Hello ${passengerName || "traveler"},\n\n` +
+            "Your arrival is coming up in 3 days.\n\n" +
+            `Booking reference: ${pnr}\n` +
+            `Flight: ${airlineName || ""} ${flightNumber}\n` +
+            `Route: ${origin} to ${destination}\n` +
+            `Arrival: ${arrivalText}\n\n` +
+            `${requirement?.headline || "Check whether your destination requires an arrival card or digital immigration form before you travel."}\n\n` +
+            `${formText}\n\n` +
+            "Requirements can change. Please confirm the latest rules with official government or airline sources before departure.",
+        html:
+            `<p>Hello ${safe.passengerName},</p>` +
+            "<p><strong>Your arrival is coming up in 3 days.</strong> Please review any destination arrival card or digital immigration form requirements.</p>" +
+            "<table style=\"border-collapse:collapse\">" +
+            `<tr><td style=\"padding:4px 16px 4px 0\"><strong>Booking reference</strong></td><td>${safe.pnr}</td></tr>` +
+            `<tr><td style=\"padding:4px 16px 4px 0\"><strong>Flight</strong></td><td>${safe.airlineName} ${safe.flightNumber}</td></tr>` +
+            `<tr><td style=\"padding:4px 16px 4px 0\"><strong>Route</strong></td><td>${safe.origin} to ${safe.destination}</td></tr>` +
+            `<tr><td style=\"padding:4px 16px 4px 0\"><strong>Arrival</strong></td><td>${safe.arrivalText}</td></tr>` +
+            "</table>" +
+            `<p>${safe.headline}</p>` +
+            formHtml +
+            "<p>Requirements can change. Please confirm the latest rules with official government or airline sources before departure.</p>"
+    });
+
+    const normalizedRecipient = String(to).trim().toLowerCase();
+    const accepted = (delivery.accepted || []).map(address =>
+        String(address).trim().toLowerCase()
+    );
+    if (!accepted.includes(normalizedRecipient)) {
+        throw new Error("The email provider did not accept the arrival card reminder recipient");
+    }
+
+    return { message_id: delivery.messageId, accepted };
+};
+
+const sendTravelChecklistReminderEmail = async ({
+    to,
+    passengerName,
+    pnr,
+    airlineName,
+    flightNumber,
+    origin,
+    destination,
+    departure
+}) => {
+    const transporter = getTransporter();
+    const departureText = new Intl.DateTimeFormat("en-US", {
+        dateStyle: "full",
+        timeStyle: "short",
+        timeZone: process.env.TRAVEL_CHECKLIST_REMINDER_TIME_ZONE || "Asia/Yangon"
+    }).format(new Date(departure));
+    const safe = {
+        passengerName: escapeHtml(passengerName || "traveler"),
+        pnr: escapeHtml(pnr),
+        airlineName: escapeHtml(airlineName),
+        flightNumber: escapeHtml(flightNumber),
+        origin: escapeHtml(origin),
+        destination: escapeHtml(destination),
+        departureText: escapeHtml(departureText)
+    };
+    const checklist = [
+        "Passport is valid for your destination requirements.",
+        "Visa, eTA, arrival card, or immigration declaration is completed if required.",
+        "Passenger name matches passport or travel document.",
+        "Baggage allowance and restricted items are reviewed.",
+        "Online check-in, seat, meal, and assistance needs are confirmed.",
+        "Travel insurance, payment card, roaming/eSIM, and local transport are ready.",
+        "Airport arrival time and terminal details are checked before departure."
+    ];
+
+    const delivery = await transporter.sendMail({
+        from: process.env.SMTP_FROM || process.env.SMTP_USER,
+        to,
+        subject: `Travel checklist for ${pnr}: ${origin} to ${destination}`,
+        text:
+            `Hello ${passengerName || "traveler"},\n\n` +
+            "Your trip is coming up. Please review this checklist before departure.\n\n" +
+            `Booking reference: ${pnr}\n` +
+            `Flight: ${airlineName || ""} ${flightNumber}\n` +
+            `Route: ${origin} to ${destination}\n` +
+            `Departure: ${departureText}\n\n` +
+            checklist.map((item, index) => `${index + 1}. ${item}`).join("\n") +
+            "\n\nPlease verify final travel requirements with official government, airport, and airline sources.",
+        html:
+            `<p>Hello ${safe.passengerName},</p>` +
+            "<p><strong>Your trip is coming up.</strong> Please review this checklist before departure.</p>" +
+            "<table style=\"border-collapse:collapse\">" +
+            `<tr><td style=\"padding:4px 16px 4px 0\"><strong>Booking reference</strong></td><td>${safe.pnr}</td></tr>` +
+            `<tr><td style=\"padding:4px 16px 4px 0\"><strong>Flight</strong></td><td>${safe.airlineName} ${safe.flightNumber}</td></tr>` +
+            `<tr><td style=\"padding:4px 16px 4px 0\"><strong>Route</strong></td><td>${safe.origin} to ${safe.destination}</td></tr>` +
+            `<tr><td style=\"padding:4px 16px 4px 0\"><strong>Departure</strong></td><td>${safe.departureText}</td></tr>` +
+            "</table>" +
+            `<ul>${checklist.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` +
+            "<p>Please verify final travel requirements with official government, airport, and airline sources.</p>"
+    });
+
+    const normalizedRecipient = String(to).trim().toLowerCase();
+    const accepted = (delivery.accepted || []).map(address =>
+        String(address).trim().toLowerCase()
+    );
+    if (!accepted.includes(normalizedRecipient)) {
+        throw new Error("The email provider did not accept the travel checklist reminder recipient");
+    }
+
+    return { message_id: delivery.messageId, accepted };
+};
+
 module.exports = {
     sendVerificationEmail,
     sendTicketEmail,
     sendBoardingPassEmail,
-    sendCheckInReminderEmail
+    sendCheckInReminderEmail,
+    sendArrivalCardReminderEmail,
+    sendTravelChecklistReminderEmail
 };

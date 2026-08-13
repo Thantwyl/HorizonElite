@@ -201,6 +201,7 @@ const register = async (req, res) => {
         const {
             title,
             first_name,
+            middle_name,
             last_name,
             phone_number,
             email_address,
@@ -314,6 +315,7 @@ const register = async (req, res) => {
                     password_hash,
                     title,
                     first_name,
+                    middle_name,
                     last_name,
                     phone_number
                 )
@@ -324,11 +326,13 @@ const register = async (req, res) => {
                     $3,
                     $4,
                     $5,
-                    $6
+                    $6,
+                    $7
                 )
                 RETURNING
                 email_address,
                 first_name,
+                middle_name,
                 last_name,
                 email_verified
                 `,
@@ -337,6 +341,7 @@ const register = async (req, res) => {
                     passwordHash,
                     title,
                     first_name,
+                    middle_name || null,
                     last_name,
                     phone_number
                 ]
@@ -465,6 +470,9 @@ const login = async (req, res) => {
 
                 first_name:
                     user.first_name,
+
+                middle_name:
+                    user.middle_name,
 
                 last_name:
                     user.last_name

@@ -13,6 +13,7 @@ require("../middlewares/optionalAuthMiddleware");
 const {
     createBooking,
     getManageBooking,
+    getBookingSummaryByPnr,
     getBookingActions
 } = require(
     "../controllers/bookingController"
@@ -22,6 +23,11 @@ router.post(
     "/",
     optionalAuthMiddleware,
     createBooking
+);
+
+router.get(
+    "/summary/:pnr",
+    getBookingSummaryByPnr
 );
 
 router.get(

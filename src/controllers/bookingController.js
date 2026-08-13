@@ -104,6 +104,26 @@ const getManageBooking = async (req, res) => {
     }
 };
 
+const getBookingSummaryByPnr = async (req, res) => {
+    try {
+        const pnr = String(req.params.pnr || "").trim();
+        if (!pnr) {
+            return res.status(400).json({ error: "PNR is required" });
+        }
+
+        const booking = await bookingService.getBookingSummaryByPnr(pnr);
+
+        return res.json({
+            message: "Booking summary found",
+            data: booking
+        });
+    } catch (error) {
+        return res.status(error.statusCode || 500).json({
+            error: error.message
+        });
+    }
+};
+
 const bookingActionService =
 require("../services/bookingActionService");
 
@@ -157,5 +177,6 @@ async (req,res)=>{
 module.exports = {
     createBooking,
     getManageBooking,
+    getBookingSummaryByPnr,
     getBookingActions
 };

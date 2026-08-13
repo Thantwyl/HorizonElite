@@ -9,6 +9,8 @@ const SCAN_INTERVAL_MS = Math.max(
     Number(process.env.CHECK_IN_REMINDER_SCAN_INTERVAL_MS || 60_000)
 );
 const MAX_ATTEMPTS = 5;
+const WHATSAPP_REMINDER_FORCE_RESEND =
+    String(process.env.WHATSAPP_REMINDER_FORCE_RESEND || "false").toLowerCase() === "true";
 let workerStarted = false;
 
 const scheduleCheckInReminder = async (bookingId) => {
@@ -29,7 +31,7 @@ const scheduleCheckInReminder = async (bookingId) => {
             ON bp.booking_id = b.booking_id
         INNER JOIN passengers p
             ON p.passenger_id = bp.passenger_id
-        WHERE b.booking_id = $1
+        WHERE (b.booking_id::text = $1 OR UPPER(b.pnr_reference) = UPPER($1))
           AND b.record_active = TRUE
           AND b.booking_status = 'TICKETED'
           AND b.ticketing_status = 'TICKETED'
@@ -82,7 +84,7 @@ const scheduleCheckInWhatsAppReminder = async (bookingId) => {
             ON bp.booking_id = b.booking_id
         INNER JOIN passengers p
             ON p.passenger_id = bp.passenger_id
-        WHERE b.booking_id = $1
+        WHERE (b.booking_id::text = $1 OR UPPER(b.pnr_reference) = UPPER($1))
           AND b.record_active = TRUE
           AND b.booking_status = 'TICKETED'
           AND b.ticketing_status = 'TICKETED'
@@ -93,18 +95,30 @@ const scheduleCheckInWhatsAppReminder = async (bookingId) => {
         ON CONFLICT (booking_id) DO UPDATE SET
             recipient_phone = EXCLUDED.recipient_phone,
             due_at = CASE
-                WHEN check_in_whatsapp_reminder_jobs.status = 'SENT'
+                WHEN check_in_whatsapp_reminder_jobs.status = 'SENT' AND $2 = FALSE
                 THEN check_in_whatsapp_reminder_jobs.due_at
                 ELSE EXCLUDED.due_at
             END,
             status = CASE
-                WHEN check_in_whatsapp_reminder_jobs.status = 'SENT'
+                WHEN check_in_whatsapp_reminder_jobs.status = 'SENT' AND $2 = FALSE
                 THEN 'SENT'
                 ELSE 'PENDING'
             END,
+            attempts = CASE
+                WHEN $2 = TRUE THEN 0
+                ELSE check_in_whatsapp_reminder_jobs.attempts
+            END,
+            sent_at = CASE
+                WHEN $2 = TRUE THEN NULL
+                ELSE check_in_whatsapp_reminder_jobs.sent_at
+            END,
+            last_error = CASE
+                WHEN $2 = TRUE THEN NULL
+                ELSE check_in_whatsapp_reminder_jobs.last_error
+            END,
             updated_at = LOCALTIMESTAMP
         RETURNING *
-    `, [bookingId]);
+    `, [bookingId, WHATSAPP_REMINDER_FORCE_RESEND]);
 
     if (result.rows.length === 0) {
         const error = new Error(
@@ -139,7 +153,7 @@ const getReminderDetails = async (bookingId) => {
             ON bp.booking_id = b.booking_id
         INNER JOIN passengers p
             ON p.passenger_id = bp.passenger_id
-        WHERE b.booking_id = $1
+        WHERE (b.booking_id::text = $1 OR UPPER(b.pnr_reference) = UPPER($1))
         ORDER BY bp.passenger_id
         LIMIT 1
     `, [bookingId]);
